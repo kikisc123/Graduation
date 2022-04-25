@@ -321,6 +321,7 @@ where
         })
     }
 
+    //server接收Relu的输出，
     pub fn online_server_protocol<'a, R: Read + Send + Unpin, W: Write + Send + Unpin>(
         reader: &mut IMuxAsync<R>,
         writer: &mut IMuxAsync<W>,

@@ -1,15 +1,19 @@
 use algebra::fixed_point::FixedPoint;
 use async_std::io::{Read, Write};
 use io_utils::imux::IMuxAsync;
+use io_utils::imux::IMuxSync;
 use protocols_sys::{ClientFHE, KeyShare, ServerFHE};
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
+use std::{
+    marker::PhantomData,
+};
 
 #[macro_use]
 extern crate bench_utils;
 
 extern crate ndarray;
 
+pub mod acg;
 pub mod bytes;
 pub mod cds;
 pub mod gc;
@@ -18,7 +22,7 @@ pub mod mpc;
 pub mod mpc_offline;
 pub mod neural_network;
 
-mod error;
+mod error;//对外不可见
 
 //#[cfg(test)]
 //mod tests;
@@ -30,8 +34,34 @@ pub struct KeygenType;
 pub type ServerKeyRcv = InMessage<Vec<std::os::raw::c_char>, KeygenType>;
 pub type ClientKeySend<'a> = OutMessage<'a, Vec<std::os::raw::c_char>, KeygenType>;
 
-pub fn client_keygen<W: Write + Unpin>(
+pub fn client_keygen<W: Write + Unpin+ >(
     writer: &mut IMuxAsync<W>,
+) -> Result<ClientFHE, bincode::Error> {
+    let mut key_share = KeyShare::new();
+    let gen_time = timer_start!(|| "Generating keys");//计时器
+    let (cfhe, keys_vec) = key_share.generate();//keys_vec:FHE所需key
+    timer_end!(gen_time);
+
+    let send_time = timer_start!(|| "Sending keys");
+    let sent_message = ClientKeySend::new(&keys_vec);
+    crate::bytes::serialize(writer, &sent_message)?;//向writer（server）发送key
+    timer_end!(send_time);
+    Ok(cfhe)//cfhe值有可能为空
+}
+
+pub fn server_keygen<R: Read + Unpin>(
+    reader: &mut IMuxAsync<R>,
+) -> Result<ServerFHE, bincode::Error> {
+    let recv_time = timer_start!(|| "Receiving keys");
+    let keys: ServerKeyRcv = crate::bytes::deserialize(reader)?;//server接收keys
+    timer_end!(recv_time);
+    let mut key_share = KeyShare::new();
+    Ok(key_share.receive(keys.msg()))
+}
+
+
+pub fn acg_client_keygen<W: Write + Send+ std::io::Write>(
+    writer: &mut IMuxSync<W>,
 ) -> Result<ClientFHE, bincode::Error> {
     let mut key_share = KeyShare::new();
     let gen_time = timer_start!(|| "Generating keys");
@@ -40,16 +70,16 @@ pub fn client_keygen<W: Write + Unpin>(
 
     let send_time = timer_start!(|| "Sending keys");
     let sent_message = ClientKeySend::new(&keys_vec);
-    crate::bytes::serialize(writer, &sent_message)?;
+    crate::bytes::acg_serialize(writer, &sent_message)?;
     timer_end!(send_time);
     Ok(cfhe)
 }
 
-pub fn server_keygen<R: Read + Unpin>(
-    reader: &mut IMuxAsync<R>,
+pub fn acg_server_keygen<R: Read + Send+ std::io::Read>(
+    reader: &mut IMuxSync<R>,
 ) -> Result<ServerFHE, bincode::Error> {
     let recv_time = timer_start!(|| "Receiving keys");
-    let keys: ServerKeyRcv = crate::bytes::deserialize(reader)?;
+    let keys: ServerKeyRcv = crate::bytes::acg_deserialize(reader)?;
     timer_end!(recv_time);
     let mut key_share = KeyShare::new();
     Ok(key_share.receive(keys.msg()))

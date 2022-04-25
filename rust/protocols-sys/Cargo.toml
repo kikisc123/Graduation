@@ -11,8 +11,7 @@ authors = [
 description = "FFI wrapper around the C++ library used in Muse"
 keywords = ["cryptography", "finite fields", "homomorphic encryption",]
 categories = ["cryptography"]
-include = ["Cargo.toml", "src", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
-license = "MIT/Apache-2.0"
+include = ["Cargo.toml", "src", "README.md"]
 
 [build-dependencies]
 bindgen = { version = "0.52.0" }

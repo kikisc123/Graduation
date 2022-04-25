@@ -11,8 +11,7 @@ authors = [
 description = "Cryptographic protocols used in Muse"
 keywords = ["cryptography", "finite fields", "garbled circuits", "secret sharing", "neural networks"]
 categories = ["cryptography", "machine learning"]
-include = ["Cargo.toml", "src", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
-license = "MIT/Apache-2.0"
+include = ["Cargo.toml", "src", "README.md"]
 
 [dependencies]
 num-traits = { version = "0.2.6"}
@@ -26,6 +25,7 @@ scuttlebutt = { version = "0.3", git = "https://github.com/GaloisInc/scuttlebutt
 rayon = { version = "1" }
 neural-network = { path = "../neural-network" }
 rand = { version = "0.6" }
+rand_chacha = { version = "0.1.1" }
 bincode = "1.0"
 serde = "1.0"
 crossbeam = "0.7.1"

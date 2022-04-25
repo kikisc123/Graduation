@@ -73,7 +73,7 @@ impl<'a> SealServerACG<'a> {
         client_share: Vec<c_char>,
     ) -> (Vec<c_char>, Vec<c_char>, Vec<c_char>) {
         match self {
-            Self::Conv2D(s) => s.process(client_share),
+            Self::Conv2D(s) => s.process(client_share),//第181行
             Self::FullyConnected(s) => s.process(client_share),
         }
     }
@@ -199,7 +199,10 @@ impl<'a> ServerACG for Conv2D<'a> {
         self.shares = Some(shares);
         // Return ciphertexts as vectors
         let linear_ct_vec = unsafe {
-            std::slice::from_raw_parts(shares.linear_ct.inner, shares.linear_ct.size as usize)
+            std::slice::from_raw_parts(
+                shares.linear_ct.inner, 
+                shares.linear_ct.size as usize
+            )
                 .to_vec()
         };
         let linear_mac_ct_vec = unsafe {
@@ -210,7 +213,10 @@ impl<'a> ServerACG for Conv2D<'a> {
             .to_vec()
         };
         let r_mac_ct_vec = unsafe {
-            std::slice::from_raw_parts(shares.r_mac_ct.inner, shares.r_mac_ct.size as usize)
+            std::slice::from_raw_parts(
+                shares.r_mac_ct.inner, 
+                shares.r_mac_ct.size as usize
+            )
                 .to_vec()
         };
         (linear_ct_vec, linear_mac_ct_vec, r_mac_ct_vec)

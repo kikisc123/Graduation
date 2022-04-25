@@ -27,31 +27,31 @@ pub fn construct_mnist<R: RngCore + CryptoRng>(
 
     let kernel_dims = (16, 1, 5, 5);
     let conv = sample_conv_layer(vs, input_dims, kernel_dims, 1, Padding::Valid, rng).0;
-    network.layers.push(Layer::LL(conv));
-    add_activation_layer(&mut network);
+    network.layers.push(Layer::LL(conv));//第一层：卷积
+    add_activation_layer(&mut network);//第二层：Relu
 
     let input_dims = network.layers.last().unwrap().output_dimensions();
     let pool = sample_avg_pool_layer(input_dims, (2, 2), 2);
-    network.layers.push(Layer::LL(pool));
+    network.layers.push(Layer::LL(pool));//第三层池化
 
     let input_dims = network.layers.last().unwrap().output_dimensions();
     let kernel_dims = (16, 16, 5, 5);
     let conv = sample_conv_layer(vs, input_dims, kernel_dims, 1, Padding::Valid, rng).0;
-    network.layers.push(Layer::LL(conv));
-    add_activation_layer(&mut network);
+    network.layers.push(Layer::LL(conv));//第四层卷积
+    add_activation_layer(&mut network);//第五层Relu
 
     let input_dims = network.layers.last().unwrap().output_dimensions();
     let pool = sample_avg_pool_layer(input_dims, (2, 2), 2);
-    network.layers.push(Layer::LL(pool));
+    network.layers.push(Layer::LL(pool));//第六层池化
 
     let fc_input_dims = network.layers.last().unwrap().output_dimensions();
     let (fc, _) = sample_fc_layer(vs, fc_input_dims, 100, rng);
-    network.layers.push(Layer::LL(fc));
-    add_activation_layer(&mut network);
+    network.layers.push(Layer::LL(fc));//第七层全连接
+    add_activation_layer(&mut network);//第八层relu
 
     let fc_input_dims = network.layers.last().unwrap().output_dimensions();
     let (fc, _) = sample_fc_layer(vs, fc_input_dims, 10, rng);
-    network.layers.push(Layer::LL(fc));
+    network.layers.push(Layer::LL(fc));//第九层全连接层
 
     for layer in &network.layers {
         println!("Layer dim: {:?}", layer.input_dimensions());

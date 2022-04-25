@@ -1,12 +1,9 @@
 use ::neural_network as nn;
 extern crate num_cpus;
 extern crate rayon;
-use algebra::{fields::near_mersenne_64::F, FixedPoint, FixedPointParameters};
+use algebra::{fields::near_mersenne_64::F, FixedPoint, FixedPointParameters,Polynomial};
 use bench_utils::*;
-use nn::tensors::*;
-use protocols::AdditiveShare;
-use rand::{CryptoRng, Rng, RngCore};
-
+use io_utils::{counting::CountingIO, imux::IMuxSync};
 use nn::{
     layers::{
         average_pooling::AvgPoolParams,
@@ -14,12 +11,20 @@ use nn::{
         fully_connected::FullyConnectedParams,
         Layer, LayerDims, LinearLayer, NonLinearLayer,
     },
-    NeuralNetwork,
+    tensors::*,
+    NeuralArchitecture, NeuralNetwork,
+};
+use protocols::{neural_network::NNProtocol, AdditiveShare};
+use rand::{CryptoRng, Rng, RngCore};
+use std::{
+    io::{BufReader, BufWriter},
+    net::{TcpListener, TcpStream},
 };
 
 pub mod latency;
 pub mod minionn;
 pub mod mnist;
+pub mod linear_only;
 
 pub struct TenBitExpParams {}
 
@@ -32,6 +37,41 @@ impl FixedPointParameters for TenBitExpParams {
 type TenBitExpFP = FixedPoint<TenBitExpParams>;
 type TenBitAS = AdditiveShare<TenBitExpParams>;
 
+pub fn acg_client_connect(
+    addr: &str,
+) -> (
+    IMuxSync<CountingIO<BufReader<TcpStream>>>,
+    IMuxSync<CountingIO<BufWriter<TcpStream>>>,
+) {
+    // TODO: Maybe change to rayon_num_threads
+    let mut readers = Vec::with_capacity(16);
+    let mut writers = Vec::with_capacity(16);
+    for _ in 0..16 {
+        let stream = TcpStream::connect(addr).unwrap();
+        readers.push(CountingIO::new(BufReader::new(stream.try_clone().unwrap())));
+        writers.push(CountingIO::new(BufWriter::new(stream)));
+    }
+    (IMuxSync::new(readers), IMuxSync::new(writers))
+}
+
+pub fn acg_server_connect(
+    addr: &str,
+) -> (
+    IMuxSync<CountingIO<BufReader<TcpStream>>>,
+    IMuxSync<CountingIO<BufWriter<TcpStream>>>,
+) {
+    let listener = TcpListener::bind(addr).unwrap();
+    let mut incoming = listener.incoming();
+    let mut readers = Vec::with_capacity(16);
+    let mut writers = Vec::with_capacity(16);
+    for _ in 0..16 {
+        let stream = incoming.next().unwrap().unwrap();
+        readers.push(CountingIO::new(BufReader::new(stream.try_clone().unwrap())));
+        writers.push(CountingIO::new(BufWriter::new(stream)));
+    }
+    (IMuxSync::new(readers), IMuxSync::new(writers))
+}
+
 pub fn generate_random_number<R: Rng>(rng: &mut R) -> (f64, TenBitExpFP) {
     let is_neg: bool = rng.gen();
     let mul = if is_neg { -1.0 } else { 1.0 };
@@ -40,6 +80,7 @@ pub fn generate_random_number<R: Rng>(rng: &mut R) -> (f64, TenBitExpFP) {
     let n = TenBitExpFP::from(f);
     (f, n)
 }
+
 
 fn sample_conv_layer<R: RngCore + CryptoRng>(
     vs: Option<&tch::nn::Path>,

@@ -43,6 +43,5 @@ fn main() {
         1 => construct_minionn(Some(&vs.root()), 1, &mut rng),
         _ => panic!(),
     };
-
-    experiments::latency::server::acg(&server_addr, network, &mut rng);
+    experiments::latency::server::acg_gc(&server_addr, network, &mut rng);
 }

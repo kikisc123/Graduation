@@ -28,13 +28,13 @@ pub const __STDC_IEC_559_COMPLEX__: u32 = 1;
 pub const __STDC_ISO_10646__: u32 = 201706;
 pub const __GNU_LIBRARY__: u32 = 6;
 pub const __GLIBC__: u32 = 2;
-pub const __GLIBC_MINOR__: u32 = 33;
+pub const __GLIBC_MINOR__: u32 = 31;
 pub const _SYS_CDEFS_H: u32 = 1;
 pub const __glibc_c99_flexarr_available: u32 = 1;
 pub const __WORDSIZE: u32 = 64;
 pub const __WORDSIZE_TIME64_COMPAT32: u32 = 1;
 pub const __SYSCALL_WORDSIZE: u32 = 64;
-pub const __LDOUBLE_REDIRECTS_TO_FLOAT128_ABI: u32 = 0;
+pub const __LONG_DOUBLE_USES_FLOAT128: u32 = 0;
 pub const __HAVE_GENERIC_SELECTION: u32 = 1;
 pub const __GLIBC_USE_LIB_EXT2: u32 = 0;
 pub const __GLIBC_USE_IEC_60559_BFP_EXT: u32 = 0;
@@ -49,7 +49,6 @@ pub const __OFF_T_MATCHES_OFF64_T: u32 = 1;
 pub const __INO_T_MATCHES_INO64_T: u32 = 1;
 pub const __RLIM_T_MATCHES_RLIM64_T: u32 = 1;
 pub const __STATFS_MATCHES_STATFS64: u32 = 1;
-pub const __KERNEL_OLD_TIMEVAL_MATCHES_TIMEVAL64: u32 = 1;
 pub const __FD_SETSIZE: u32 = 1024;
 pub const _BITS_TIME64_H: u32 = 1;
 pub const _BITS_WCHAR_H: u32 = 1;
@@ -164,7 +163,6 @@ pub type __id_t = ::std::os::raw::c_uint;
 pub type __time_t = ::std::os::raw::c_long;
 pub type __useconds_t = ::std::os::raw::c_uint;
 pub type __suseconds_t = ::std::os::raw::c_long;
-pub type __suseconds64_t = ::std::os::raw::c_long;
 pub type __daddr_t = ::std::os::raw::c_int;
 pub type __key_t = ::std::os::raw::c_int;
 pub type __clockid_t = ::std::os::raw::c_int;
@@ -578,11 +576,11 @@ fn bindgen_test_layout_Metadata() {
 #[repr(C)]
 #[derive(Debug)]
 pub struct ClientFHE {
-    pub context: *mut ::std::os::raw::c_void,
-    pub encoder: *mut ::std::os::raw::c_void,
-    pub encryptor: *mut ::std::os::raw::c_void,
-    pub evaluator: *mut ::std::os::raw::c_void,
-    pub decryptor: *mut ::std::os::raw::c_void,
+    pub context: *mut ::std::os::raw::c_void,//明文
+    pub encoder: *mut ::std::os::raw::c_void,//除了encoder，其余都没用到！
+    pub encryptor: *mut ::std::os::raw::c_void,//加密
+    pub evaluator: *mut ::std::os::raw::c_void,//计算
+    pub decryptor: *mut ::std::os::raw::c_void,//解密
 }
 #[test]
 fn bindgen_test_layout_ClientFHE() {
@@ -650,11 +648,11 @@ fn bindgen_test_layout_ClientFHE() {
 #[repr(C)]
 #[derive(Debug)]
 pub struct ServerFHE {
-    pub context: *mut ::std::os::raw::c_void,
-    pub encoder: *mut ::std::os::raw::c_void,
-    pub encryptor: *mut ::std::os::raw::c_void,
-    pub evaluator: *mut ::std::os::raw::c_void,
-    pub gal_keys: *mut ::std::os::raw::c_void,
+    pub context: *mut ::std::os::raw::c_void,//明文
+    pub encoder: *mut ::std::os::raw::c_void,//编码
+    pub encryptor: *mut ::std::os::raw::c_void,//加密
+    pub evaluator: *mut ::std::os::raw::c_void,//计算
+    pub gal_keys: *mut ::std::os::raw::c_void,//
     pub relin_keys: *mut ::std::os::raw::c_void,
     pub zero: *mut ::std::os::raw::c_char,
 }

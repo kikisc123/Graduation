@@ -687,20 +687,21 @@ mod test {
         let mut rng = thread_rng();
         let p = <F as PrimeField>::Params::MODULUS.0 as u128;
         let n = num_bits(p);
-        let moduli = vec![2; n];
+        let moduli = vec![2; n];//模量向量
         let neg_p = !p + 1;
 
         // Construct multiplication circuit
         let mut b = CircuitBuilder::new();
         // Convert to circuit constants
         let neg_p = b.bin_constant_bundle(neg_p, n).unwrap();
-        let zero = b.constant(0, 2).unwrap();
+        let zero = b.constant(0, 2).unwrap();//创造一个模q的数x
 
         let e1 = BinaryBundle::new(b.garbler_inputs(&moduli));
         let e2 = BinaryBundle::new(b.evaluator_inputs(&moduli));
 
         // We only need 2*(n-1) bits since the multiplication is between fresh field
         // elements
+        //二进制乘法
         let x = bin_mul(&mut b, &e1, &e2, 2 * (n - 1)).unwrap();
         let out = mul_reduce(&mut b, &neg_p, &zero, &x).unwrap();
 
@@ -710,7 +711,7 @@ mod test {
         let _ = c.print_info();
         let (en, ev) = fancy_garbling::garble(&mut c).unwrap();
 
-        for i in 0..1000 {
+        for i in 0..10 {
             // Input
             let a = generate_random_number(&mut rng).1;
             let b = generate_random_number(&mut rng).1;
@@ -724,6 +725,7 @@ mod test {
 
             let eval_result = util::u128_from_bits(&garbled_eval_results);
             let pt_result = (a * b).inner.into_repr().0 as u128;
+            println!("Got{}Expected{}",eval_result, pt_result);
             assert_eq!(
                 eval_result, pt_result,
                 "\nIter {}: Got {} Expected {}",
@@ -749,16 +751,17 @@ mod test {
         let Q = product(&vec![q; n]);
         println!("n={} q={} Q={}", n, q, Q);
 
-        let mut b = CircuitBuilder::new();
-        relu::<TenBitExpParams>(&mut b, 1).unwrap();
-        let mut c = b.finish();
+        let mut b = CircuitBuilder::new();//创建建造电路类
+        relu::<TenBitExpParams>(&mut b, 1).unwrap();//计算rulu
+        let mut c = b.finish();//创建了relu混淆电路
         let _ = c.print_info();
 
         let zero = TenBitExpFP::zero();
         let six = TenBitExpFP::from(6.0);
-        for i in 0..10000 {
+        for i in 0..10 {
             let (_, n1) = generate_random_number(&mut rng);
-            let (s1, s2) = n1.share(&mut rng);
+            //或者：let n=generate_random_number(&mut rng).1;
+            let (s1, s2) = n1.share(&mut rng);//卧槽！产生加性秘密共享！
             let res_should_be_fp = if n1 <= zero {
                 zero
             } else if n1 > six {
@@ -766,26 +769,29 @@ mod test {
             } else {
                 n1
             };
+            //result_should_be
             let res_should_be = res_should_be_fp.inner.into_repr().0 as u128;
             let z1 = F::uniform(&mut rng).into_repr().0 as u128;
             let res_should_be = (res_should_be + z1) % p;
 
             let s1 = s1.inner.inner.into_repr().0 as u128;
-            let mut garbler_inputs = util::u128_to_bits(s1, n);
+            let mut garbler_inputs = util::u128_to_bits(s1, n);//garbler的输入（s1）
             garbler_inputs.extend_from_slice(&util::u128_to_bits(z1, n));
 
             let z2 = F::uniform(&mut rng).into_repr().0 as u128;
             let res_should_be = (res_should_be + z2) % p;
 
             let s2 = s2.inner.inner.into_repr().0 as u128;
-            let mut evaluator_inputs = util::u128_to_bits(s2, n);
+            let mut evaluator_inputs = util::u128_to_bits(s2, n);//evaluator的输入（s2）
             evaluator_inputs.extend_from_slice(&util::u128_to_bits(z2, n));
 
-            let (en, ev) = fancy_garbling::garble(&mut c).unwrap();
-            let xs = en.encode_garbler_inputs(&garbler_inputs);
-            let ys = en.encode_evaluator_inputs(&evaluator_inputs);
+            let (en, ev) = fancy_garbling::garble(&mut c).unwrap();//混淆电路c
+            let xs = en.encode_garbler_inputs(&garbler_inputs);//编码garbler的输入
+            let ys = en.encode_evaluator_inputs(&evaluator_inputs);//编码evaluator的输入
+            //计算混淆电路：
             let garbled_eval_results = ev.eval(&mut c, &xs, &ys).unwrap();
 
+            //在明文中计算混淆电路
             let evaluated_results = c.eval_plain(&garbler_inputs, &evaluator_inputs).unwrap();
             assert!(
                 assert_delta(util::u128_from_bits(&evaluated_results), res_should_be, 1),
@@ -821,18 +827,18 @@ mod test {
         let Q = product(&vec![q; n]);
         println!("n={} q={} Q={}", n, q, Q);
 
-        let mut b = CircuitBuilder::new();
+        let mut b = CircuitBuilder::new();//创建新的电路建造类
         truncated_relu::<TenBitExpParams>(&mut b, 1, trunc_bits).unwrap();
-        let mut c = b.finish();
+        let mut c = b.finish();//电路建造完毕
         let _ = c.print_info();
 
-        let zero = TenBitExpFP::zero();
-        let one = TenBitExpFP::one();
+        let zero = TenBitExpFP::zero();//0标签
+        let one = TenBitExpFP::one();//1标签
         let six = TenBitExpFP::from(6.0);
         for i in 0..10000 {
-            let (_, n1) = generate_random_number(&mut rng);
-            let (s1, s2) = n1.share(&mut rng);
-            let mut s1 = s1.inner;
+            let (_, n1) = generate_random_number(&mut rng);//产生随机数
+            let (s1, s2) = n1.share(&mut rng);//rng的加性秘密共享s1,s2
+            let mut s1 = s1.inner;//即秘密共享值
             let mut s2 = s2.inner;
 
             let res_should_be_fp = if n1 <= zero {
@@ -845,6 +851,7 @@ mod test {
             let mut res_should_be = res_should_be_fp.inner.into_repr().0 as u128;
 
             // Multiply client and server's inputs by one for each truncation
+            //对每个截断用1标签乘以客户端和服务器的输入s1,s2
             for _ in 0..num_trunc {
                 s1 = one * s1;
                 s2 = one * s2;
@@ -852,8 +859,9 @@ mod test {
 
             // Server's randomizer
             let z1 = F::uniform(&mut rng).into_repr().0 as u128;
-            res_should_be = (res_should_be + z1) % p;
+            res_should_be = (res_should_be + z1) % p;//加随机遮蔽向量r
 
+            //garbler的输入
             let mut garbler_inputs = util::u128_to_bits(s2.inner.into_repr().0 as u128, n);
             garbler_inputs.extend_from_slice(&util::u128_to_bits(z1, n));
 
@@ -861,12 +869,15 @@ mod test {
             let z2 = F::uniform(&mut rng).into_repr().0 as u128;
             res_should_be = (res_should_be + z2) % p;
 
+            //evaluator的输入
             let mut evaluator_inputs = util::u128_to_bits(s1.inner.into_repr().0 as u128, n);
             evaluator_inputs.extend_from_slice(&util::u128_to_bits(z2, n));
 
+            //混淆电路c
             let (en, ev) = fancy_garbling::garble(&mut c).unwrap();
-            let xs = en.encode_garbler_inputs(&garbler_inputs);
-            let ys = en.encode_evaluator_inputs(&evaluator_inputs);
+            let xs = en.encode_garbler_inputs(&garbler_inputs);//编码garbler的输入
+            let ys = en.encode_evaluator_inputs(&evaluator_inputs);//编码evaluator的输入
+            //输入标签计算混淆电路
             let garbled_eval_results = ev.eval(&mut c, &xs, &ys).unwrap();
             let evaluated_results = c.eval_plain(&garbler_inputs, &evaluator_inputs).unwrap();
 
@@ -930,16 +941,18 @@ mod test {
     #[test]
     pub(crate) fn test_cds() {
         let mut rng = thread_rng();
-        let p = <F as PrimeField>::Params::MODULUS.0 as u128;
-        let n = num_bits(p);
+        let p = <F as PrimeField>::Params::MODULUS.0 as u128;//模量
+        let n = num_bits(p);//表示模量p所需要的比特数
 
         let layer_size = 100;
 
         // Construct CDS circuit
         let mut b = CircuitBuilder::new();
+        //构造cds电路并将暑促标签发送给client
         cds::<TenBitExpParams>(&mut b, layer_size).unwrap();
         let mut c = b.finish();
         let _ = c.print_info();
+        //不采用流来混淆一个电路并且返回混淆标签
         let ((en, ev), out_labels) = fancy_garbling::garble_out(&mut c).unwrap();
         let deltas = en
             .get_deltas()
@@ -955,14 +968,17 @@ mod test {
             .collect::<Vec<_>>();
 
         // Construct dummy circuit to check result
-        let mut b_relu = CircuitBuilder::new();
+        //构建虚拟电路以检验结果
+        let mut b_relu = CircuitBuilder::new();//创建电路建造类
         dummy(&mut b_relu, layer_size).unwrap();
-        let mut c_relu = b_relu.finish();
+        let mut c_relu = b_relu.finish();//电路创建完毕
+        //混淆一个电路，该电路的输入标签是另一个电路的输入标签
         let (_, ev_relu) =
             fancy_garbling::garble_chain(&mut c_relu, Vec::new(), otp_labels, &deltas.as_slice())
                 .unwrap();
 
         // Client has y and r
+        //y=Miri-si
         let y = (0..layer_size)
             .map(|_| generate_random_number(&mut rng).1)
             .collect::<Vec<_>>();
@@ -971,36 +987,44 @@ mod test {
             .collect::<Vec<_>>();
 
         // Server has alpha and beta
+        //α，β
         let alpha = generate_random_number(&mut rng).1;
         let beta = generate_random_number(&mut rng).1;
 
         // Both parties have shares of ay, br
+        //α（Miri-si），βri
         let ay = y.iter().map(|e| *e * alpha).collect::<Vec<TenBitExpFP>>();
         let br = r.iter().map(|e| *e * beta).collect::<Vec<TenBitExpFP>>();
 
+        //ay的加性秘密共享值
         let ay_shares = ay
             .iter()
             .map(|e| e.share(&mut rng))
             .collect::<Vec<(_, _)>>();
 
+        //br的加性秘密共享值
         let br_shares = br
             .iter()
             .map(|e| e.share(&mut rng))
             .collect::<Vec<(_, _)>>();
 
         // Create vector of client inputs
+        //创造客户端的输入向量
         let evaluator_inputs = ay_shares
             .iter()
             .map(|e| util::u128_to_bits(e.1.inner.inner.into_repr().0 as u128, n))
+            //βri
             .chain(
                 br_shares
                     .iter()
                     .map(|e| util::u128_to_bits(e.1.inner.inner.into_repr().0 as u128, n)),
             )
+            //Miri-si
             .chain(
                 y.iter()
                     .map(|e| util::u128_to_bits(e.inner.into_repr().0 as u128, n)),
             )
+            //ri
             .chain(
                 r.iter()
                     .map(|e| util::u128_to_bits(e.inner.into_repr().0 as u128, n)),
@@ -1012,6 +1036,7 @@ mod test {
         let mut garbler_inputs = ay_shares
             .iter()
             .map(|e| util::u128_to_bits(e.0.inner.inner.into_repr().0 as u128, n))
+            //βri
             .chain(
                 br_shares
                     .iter()
@@ -1019,12 +1044,15 @@ mod test {
             )
             .flatten()
             .collect::<Vec<_>>();
+        //garbler再输入α和β
         garbler_inputs.extend(util::u128_to_bits(alpha.inner.into_repr().0 as u128, n));
         garbler_inputs.extend(util::u128_to_bits(beta.inner.into_repr().0 as u128, n));
 
         // Encode inputs and evaluate circuit
+        //对garbler和evaluator的输入进行编码
         let xs = en.encode_garbler_inputs(&garbler_inputs);
         let ys = en.encode_evaluator_inputs(&evaluator_inputs);
+        //计算混淆电路并且返回输出标签
         let masked_labels = ev.eval_labels(&mut c, &xs, &ys).unwrap();
 
         // Server checks bits and if true reverse OTP
@@ -1036,11 +1064,14 @@ mod test {
 
         // Convert resulting bits to wire labels as input to the dummy
         // circuit
+        //将结果bit转换为虚拟电路的输入线标签
         let dummy_result = ev_relu
+        //计算混淆电路
             .eval(&mut c_relu, labels.as_slice(), labels.as_slice())
             .unwrap();
 
         // Assert all the results are correct
+        //y=Miri-si
         y.iter()
             .chain(r.iter())
             .zip(dummy_result.as_slice().chunks(n))

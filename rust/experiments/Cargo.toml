@@ -11,8 +11,7 @@ authors = [
 description = "Experiments from the Muse paper"
 keywords = ["cryptography", "finite fields", "garbled circuits", "secret sharing"]
 categories = ["cryptography"]
-include = ["Cargo.toml", "src", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
-license = "MIT/Apache-2.0"
+include = ["Cargo.toml", "src", "README.md"]
 
 [dependencies]
 algebra = { path = "../algebra" }

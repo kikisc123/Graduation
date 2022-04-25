@@ -9,12 +9,14 @@ use crypto_primitives::{
 };
 use futures::stream::StreamExt;
 use io_utils::{counting::CountingIO, imux::IMuxAsync};
+//use io_utils::imux::IMuxSync;
 use neural_network::{
     tensors::{Input, Output},
     NeuralNetwork,
 };
 use num_traits::identities::Zero;
 use protocols::{
+    acg::ACGProtocol,
     gc::ServerGcMsgSend,
     linear_layer::LinearProtocol,
     mpc::{ServerMPC, MPC},
@@ -33,6 +35,15 @@ use async_std::{
     net::{TcpListener, TcpStream},
     task,
 };
+
+pub use fancy_garbling;
+/* 
+use fancy_garbling::{
+    circuit::CircuitBuilder,
+    error::{CircuitBuilderError, FancyError},
+    util, BinaryBundle, BinaryGadgets, Bundle, BundleGadgets, Fancy,
+};
+*/
 
 pub fn server_connect(
     addr: &str,
@@ -99,10 +110,11 @@ pub fn acg<R: RngCore + CryptoRng>(
     nn: NeuralNetwork<TenBitAS, TenBitExpFP>,
     rng: &mut R,
 ) {
+    //连接server和client
     let (mut reader, mut writer) = server_connect(server_addr);
 
     // Keygen
-    let sfhe = server_keygen(&mut reader).unwrap();
+    let sfhe = server_keygen(&mut reader).unwrap();//接收FHE所需key
     reader.reset();
 
     let mut linear_shares: BTreeMap<
@@ -112,15 +124,15 @@ pub fn acg<R: RngCore + CryptoRng>(
             Output<F>,
             Output<AuthAdditiveShare<F>>,
         ),
-    > = BTreeMap::new();
-    let mut mac_keys: BTreeMap<usize, (F, F)> = BTreeMap::new();
+    > = BTreeMap::new();//第一个，要输出的
+    let mut mac_keys: BTreeMap<usize, (F, F)> = BTreeMap::new();//第二个
 
     let linear_time = timer_start!(|| "Linear layers offline phase");
     for (i, layer) in nn.layers.iter().enumerate() {
         match layer {
             Layer::NLL(NonLinearLayer::ReLU { .. }) => {}
             Layer::LL(layer) => {
-                let (shares, keys) = match &layer {
+                let (shares, keys) = match &layer {//该层的acg输出，核心，下面所有都是为了产生
                     LinearLayer::Conv2d { .. } | LinearLayer::FullyConnected { .. } => {
                         let mut acg_handler = match &layer {
                             LinearLayer::Conv2d { .. } => SealServerACG::Conv2D(
@@ -135,6 +147,8 @@ pub fn acg<R: RngCore + CryptoRng>(
                             }
                             _ => unreachable!(),
                         };
+                        //返回那两个值
+                        //返回值shares and keys
                         LinearProtocol::<TenBitExpParams>::offline_server_acg_protocol(
                             &mut reader,
                             &mut writer,
@@ -145,6 +159,7 @@ pub fn acg<R: RngCore + CryptoRng>(
                         )
                         .unwrap()
                     }
+                    //如果是池化层
                     LinearLayer::AvgPool { dims, .. } | LinearLayer::Identity { dims } => {
                         let in_zero = Output::zeros(dims.input_dimensions());
                         if linear_shares.keys().any(|k| k == &(i - 1)) {
@@ -154,12 +169,14 @@ pub fn acg<R: RngCore + CryptoRng>(
                             let prev_output_share = &linear_shares.get(&(i - 1)).unwrap().2;
                             let mut output_share = Output::zeros(dims.output_dimensions());
                             layer.evaluate_naive_auth(prev_output_share, &mut output_share);
-                            (
+                            (//返回值
+                                //shares3个
                                 (
                                     Input::auth_share_from_parts(in_zero.clone(), in_zero.clone()),
                                     Output::zeros(dims.output_dimensions()),
                                     output_share,
                                 ),
+                                //keys2个
                                 prev_mac_keys.clone(),
                             )
                         } else {
@@ -177,19 +194,21 @@ pub fn acg<R: RngCore + CryptoRng>(
                                 .unwrap();
                             let mut output_share = Output::zeros(dims.output_dimensions());
                             layer.evaluate_naive_auth(&input_share, &mut output_share);
-                            (
+                            (//返回值
+                                //shares3个
                                 (
                                     -input_share,
                                     Output::zeros(dims.output_dimensions()),
                                     output_share,
                                 ),
+                                //keys2个
                                 (key, key),
                             )
                         }
                     }
                 };
-                linear_shares.insert(i, shares);
-                mac_keys.insert(i, keys);
+                linear_shares.insert(i, shares);//shares:
+                mac_keys.insert(i, keys);//keys:αi,βi
             }
         }
     }
@@ -206,8 +225,11 @@ pub fn garbling<R: RngCore + CryptoRng>(server_addr: &str, layers: &[usize], rng
 
     let activations: usize = layers.iter().map(|e| *e).sum();
     let _garble_time = timer_start!(|| "Garbling Time");
+    //混淆电路的数量
     let mut gc_s = Vec::with_capacity(activations);
+    //编码器的数量，这两个肯定和激活函数的数量是一致的呀！
     let mut encoders = Vec::with_capacity(activations);
+
     let p = (<<F as PrimeField>::Params>::MODULUS.0).into();
 
     assert_eq!(activations, layers.iter().fold(0, |sum, &x| sum + x));
@@ -215,6 +237,7 @@ pub fn garbling<R: RngCore + CryptoRng>(server_addr: &str, layers: &[usize], rng
 
     // For each layer, garbled a circuit with the correct number of truncations
     for num in layers.iter() {
+        //每一层创造一个circuit
         let c = protocols::gc::make_truncated_relu::<TenBitExpParams>(
             TenBitExpParams::EXPONENT_CAPACITY,
         );
@@ -436,195 +459,136 @@ pub fn input_auth<R: RngCore + CryptoRng>(server_addr: &str, layers: &[usize], r
     ));
 }
 
-//pub fn async_input_auth<R: RngCore + CryptoRng>(
-//    server_addr: &str,
-//    server_addr_2: &str,
-//    layers: &[usize],
-//    rng: &mut R,
-//) {
-//    use protocols::async_client_keygen;
-//    use protocols_sys::SealCT;
-//
-//    // TODO: Need a sync stream for now because async is not implemented for online MPC
-//    let (mut sync_reader, mut sync_writer) = server_connect_sync(server_addr);
-//
-//    let (mut reader, mut writer) =
-//        task::block_on(async { server_connect_async(server_addr).await });
-//
-//    let (sfhe, mut cfhe) = task::block_on(async {
-//        (
-//            async_server_keygen(&mut reader).await.unwrap(),
-//            async_client_keygen(&mut writer).await.unwrap(),
-//        )
-//    });
-//
-//    writer.reset();
-//
-//    // Generate dummy labels/layer for CDS
-//    let activations: usize = layers.iter().map(|e| *e).sum();
-//    let modulus_bits = <F as PrimeField>::size_in_bits();
-//    let elems_per_label = (128.0 / (modulus_bits - 1) as f64).ceil() as usize;
-//
-//    let out_mac_keys = vec![F::zero(); layers.len()];
-//    let out_mac_shares = vec![F::zero(); activations];
-//    let inp_mac_keys = vec![F::zero(); layers.len()];
-//    let inp_mac_shares = vec![F::zero(); activations];
-//    let zero_labels = vec![F::zero(); 2 * activations * modulus_bits * elems_per_label];
-//    let one_labels = vec![F::zero(); 2 * activations * modulus_bits * elems_per_label];
-//
-//    let num_rands = 2 * (activations + activations * modulus_bits);
-//
-//    // Generate rands
-//    let mac_key = F::uniform(rng);
-//    let gen = ServerOfflineMPC::new(&sfhe, mac_key.into_repr().0);
-//
-//    let input_time = timer_start!(|| "Input Auth");
-//    let rands = gen.async_rands_gen(&mut reader, &mut writer, rng, num_rands);
-//    let mut mpc = ServerMPC::new(rands, Vec::new(), mac_key);
-//
-//    // Share inputs
-//    let share_time = timer_start!(|| "Server sharing inputs");
-//    let out_mac_keys = mpc
-//        .private_inputs(
-//            &mut sync_reader,
-//            &mut sync_writer,
-//            out_mac_keys.as_slice(),
-//            rng,
-//        )
-//        .unwrap();
-//    let inp_mac_keys = mpc
-//        .private_inputs(
-//            &mut sync_reader,
-//            &mut sync_writer,
-//            inp_mac_keys.as_slice(),
-//            rng,
-//        )
-//        .unwrap();
-//    let out_mac_shares = mpc
-//        .private_inputs(
-//            &mut sync_reader,
-//            &mut sync_writer,
-//            out_mac_shares.as_slice(),
-//            rng,
-//        )
-//        .unwrap();
-//    let inp_mac_shares = mpc
-//        .private_inputs(
-//            &mut sync_reader,
-//            &mut sync_writer,
-//            inp_mac_shares.as_slice(),
-//            rng,
-//        )
-//        .unwrap();
-//    let zero_labels = mpc
-//        .private_inputs(
-//            &mut sync_reader,
-//            &mut sync_writer,
-//            zero_labels.as_slice(),
-//            rng,
-//        )
-//        .unwrap();
-//    let one_labels = mpc
-//        .private_inputs(
-//            &mut sync_reader,
-//            &mut sync_writer,
-//            one_labels.as_slice(),
-//            rng,
-//        )
-//        .unwrap();
-//    timer_end!(share_time);
-//
-//    // Receive client shares
-//    let recv_time = timer_start!(|| "Server receiving inputs");
-//    let out_bits = mpc
-//        .recv_private_inputs(
-//            &mut sync_reader,
-//            &mut sync_writer,
-//            activations * modulus_bits,
-//        )
-//        .unwrap();
-//    let inp_bits = mpc
-//        .recv_private_inputs(
-//            &mut sync_reader,
-//            &mut sync_writer,
-//            activations * modulus_bits,
-//        )
-//        .unwrap();
-//    let c_out_mac_shares = mpc
-//        .recv_private_inputs(&mut sync_reader, &mut sync_writer, activations)
-//        .unwrap();
-//    let c_inp_mac_shares = mpc
-//        .recv_private_inputs(&mut sync_reader, &mut sync_writer, activations)
-//        .unwrap();
-//    timer_end!(recv_time);
-//    timer_end!(input_time);
-//    add_to_trace!(|| "Bytes written: ", || format!(
-//        "{}",
-//        writer.count() + sync_writer.count()
-//    ));
-//}
-//
-//pub fn input_auth_ltme<R: RngCore + CryptoRng>(server_addr: &str, layers: &[usize], rng: &mut R) {
-//    use protocols::client_keygen;
-//    use protocols_sys::SealCT;
-//
-//    let (mut reader, mut writer) = server_connect_sync(server_addr);
-//
-//    // Keygen
-//    let sfhe = server_keygen(&mut reader).unwrap();
-//    let mut cfhe = client_keygen(&mut writer).unwrap();
-//
-//    // Generate and send MAC key to client
-//    let mac_key = F::uniform(rng);
-//    let mut mac_ct_seal = SealCT::new();
-//    let mac_ct = mac_ct_seal.encrypt_vec(&cfhe, vec![mac_key.into_repr().0, 8192]);
-//
-//    let gen = ServerOfflineMPC::<F, _>::new(&sfhe, mac_key.into_repr().0);
-//    gen.send_mac(&mut writer, mac_ct);
-//    let mut mpc = ServerMPC::new(Vec::new(), Vec::new(), mac_key);
-//
-//    // Generate dummy labels/layer for CDS
-//    let activations: usize = layers.iter().map(|e| *e).sum();
-//    let modulus_bits = <F as PrimeField>::size_in_bits();
-//    let elems_per_label = (128.0 / (modulus_bits - 1) as f64).ceil() as usize;
-//
-//    let out_mac_keys = vec![F::zero(); layers.len()];
-//    let out_mac_shares = vec![F::zero(); activations];
-//    let inp_mac_keys = vec![F::zero(); layers.len()];
-//    let inp_mac_shares = vec![F::zero(); activations];
-//    let zero_labels = vec![F::zero(); 2 * activations * modulus_bits * elems_per_label];
-//    let one_labels = vec![F::zero(); 2 * activations * modulus_bits * elems_per_label];
-//
-//    let input_time = timer_start!(|| "Input Auth");
-//
-//    // Share inputs
-//    let share_time = timer_start!(|| "Server sharing inputs");
-//    let out_mac_keys = mpc
-//        .private_inputs(&mut reader, &mut writer, out_mac_keys.as_slice(), rng)
-//        .unwrap();
-//    let inp_mac_keys = mpc
-//        .private_inputs(&mut reader, &mut writer, inp_mac_keys.as_slice(), rng)
-//        .unwrap();
-//    let out_mac_shares = mpc
-//        .private_inputs(&mut reader, &mut writer, out_mac_shares.as_slice(), rng)
-//        .unwrap();
-//    let inp_mac_shares = mpc
-//        .private_inputs(&mut reader, &mut writer, inp_mac_shares.as_slice(), rng)
-//        .unwrap();
-//    let zero_labels = mpc
-//        .private_inputs(&mut reader, &mut writer, zero_labels.as_slice(), rng)
-//        .unwrap();
-//    let one_labels = mpc
-//        .private_inputs(&mut reader, &mut writer, one_labels.as_slice(), rng)
-//        .unwrap();
-//    timer_end!(share_time);
-//
-//    // Receive client shares
-//    let recv_time = timer_start!(|| "Server receiving inputs");
-//    let out_bits = gen.recv_optimized_input(&cfhe, &mut reader, activations * modulus_bits);
-//    let inp_bits = gen.recv_optimized_input(&cfhe, &mut reader, activations * modulus_bits);
-//    let c_out_mac_shares = gen.recv_optimized_input(&cfhe, &mut reader, activations);
-//    let c_inp_mac_shares = gen.recv_optimized_input(&cfhe, &mut reader, activations);
-//    timer_end!(recv_time);
-//    timer_end!(input_time);
-//}
+pub fn acg_gc<R: RngCore + CryptoRng>(
+    server_addr: &str,
+    nn: NeuralNetwork<TenBitAS, TenBitExpFP>,
+    rng: &mut R,
+) {
+    //连接server和client
+    let (mut reader, mut writer) = acg_server_connect(server_addr);
+
+    //let sfhe = acg_server_keygen(&mut reader).unwrap();//接收FHE所需key
+    reader.reset();
+/* 
+    let mut linear_shares: BTreeMap<usize,
+        (
+            Input<AuthAdditiveShare<F>>,
+            Output<F>,
+            Output<AuthAdditiveShare<F>>,
+        ),
+    > = BTreeMap::new();//第一个，要输出的mac及share
+    let mut mac_keys: BTreeMap<usize, (F, F)> = BTreeMap::new();//第二个
+*/
+    let mut linear_shares = BTreeMap::new();
+    let mut mac_keys = BTreeMap::new();
+    let linear_time = timer_start!(|| "Linear layers offline phase");
+    for (i, layer) in nn.layers.iter().enumerate() {
+        match layer {
+            Layer::NLL(NonLinearLayer::ReLU { .. }) => {}
+            Layer::LL(layer) => {
+                let (shares, keys) = match &layer {//该层的acg输出，产生ss和share
+                    LinearLayer::Conv2d { .. } | LinearLayer::FullyConnected { .. } |LinearLayer::AvgPool { .. } | LinearLayer::Identity { .. }=> {                         
+                        /*let mut acg_handler = match &layer {
+                            LinearLayer::Conv2d { .. } => SealServerACG::Conv2D(
+                                server_acg::Conv2D::new(&sfhe, &layer, &layer.kernel_to_repr()),
+                            ),
+                            LinearLayer::FullyConnected { .. } => {
+                                SealServerACG::FullyConnected(server_acg::FullyConnected::new(
+                                    &sfhe,
+                                    &layer,
+                                    &layer.kernel_to_repr(),
+                                ))
+                            }
+                            _ => unreachable!(),
+                        };
+                        */
+                        //返回那两个值
+                        //返回值shares and keys
+                        let number_of_ACGs=1;
+                        ACGProtocol::<TenBitExpParams>::offline_client_acg_gc_protocol(
+                            &mut reader,
+                            &mut writer,
+                            number_of_ACGs,
+                            rng,
+                        )
+                        .unwrap()
+                    }
+                    /* 
+                    //如果是池化层
+                    LinearLayer::AvgPool { dims, .. } | LinearLayer::Identity { dims } => {
+                        let in_zero = Output::zeros(dims.input_dimensions());
+                        // If the layer comes after a linear layer, apply the function to
+                            // the last layer's output share MAC
+                            let prev_mac_keys = mac_keys.get(&(i - 1)).unwrap();
+                            let prev_output_share = &linear_shares.get(&(i - 1)).unwrap().2;
+                            let mut output_share = Output::zeros(dims.output_dimensions());
+                            layer.evaluate_naive_auth(prev_output_share, &mut output_share);
+                            (//返回值
+                                //shares3个
+                                (
+                                    Input::auth_share_from_parts(in_zero.clone(), in_zero.clone()),
+                                    Output::zeros(dims.output_dimensions()),
+                                    output_share,
+                                ),
+                                //keys2个
+                                prev_mac_keys.clone(),
+                            )
+                        /*     
+                        if linear_shares.keys().any(|k| k == &(i - 1)) {
+                            // If the layer comes after a linear layer, apply the function to
+                            // the last layer's output share MAC
+                            let prev_mac_keys = mac_keys.get(&(i - 1)).unwrap();
+                            let prev_output_share = &linear_shares.get(&(i - 1)).unwrap().2;
+                            let mut output_share = Output::zeros(dims.output_dimensions());
+                            layer.evaluate_naive_auth(prev_output_share, &mut output_share);
+                            (//返回值
+                                //shares3个
+                                (
+                                    Input::auth_share_from_parts(in_zero.clone(), in_zero.clone()),
+                                    Output::zeros(dims.output_dimensions()),
+                                    output_share,
+                                ),
+                                //keys2个
+                                prev_mac_keys.clone(),
+                            )
+                        }
+                        */ /*else {
+                            // If the layer comes after a non-linear layer, receive the
+                            // randomizer from the client, authenticate it, and then apply the
+                            // function to the MAC share
+                            let (key, input_share) =
+                                LinearProtocol::<TenBitExpParams>::offline_server_auth_share(
+                                    &mut reader,
+                                    &mut writer,
+                                    dims.input_dimensions(),
+                                    &sfhe,
+                                    rng,
+                                )
+                                .unwrap();
+                            let mut output_share = Output::zeros(dims.output_dimensions());
+                            layer.evaluate_naive_auth(&input_share, &mut output_share);
+                            (//返回值
+                                //shares3个
+                                (
+                                    -input_share,
+                                    Output::zeros(dims.output_dimensions()),
+                                    output_share,
+                                ),
+                                //keys2个
+                                (key, key),
+                            )
+                        }*/
+                    }*/
+                };
+                linear_shares.insert(i, shares);
+                mac_keys.insert(i, keys);
+            }
+        }
+    }
+    timer_end!(linear_time);
+    add_to_trace!(|| "Communication", || format!(
+        "Read {} bytes\nWrote {} bytes",
+        reader.count(),
+        writer.count()
+    ));
+}

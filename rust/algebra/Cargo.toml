@@ -12,8 +12,7 @@ authors = [
 description = "A library for finite field arithmetic"
 keywords = ["cryptography", "finite fields"]
 categories = ["cryptography"]
-include = ["Cargo.toml", "src", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
-license = "MIT/Apache-2.0"
+include = ["Cargo.toml", "src", "README.md"]
 
 ################################# Dependencies ################################
 
@@ -38,7 +37,7 @@ rayon = { version = "1", optional = true }
 
 
 [dev-dependencies]
-blake2 = "0.7"
+blake2 = "0.9"
 criterion = "0.2"
 rand_chacha = "0.1.1"
 

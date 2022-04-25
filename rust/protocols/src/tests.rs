@@ -172,6 +172,7 @@ fn sample_avg_pool_layer(
     (layer, pt_layer)
 }
 
+//为神经网络层次之间添加relu激活函数
 fn add_activation_layer<P, Q>(nn: &mut NeuralNetwork<P, Q>) {
     let cur_input_dims = nn.layers.last().as_ref().unwrap().output_dimensions();
     let layer_dims = LayerDims {
@@ -194,13 +195,13 @@ mod gc {
     #[test]
     fn test_relu() {
         let mut rng = ChaChaRng::from_seed(RANDOMNESS);
-        let num_relus = 1;
+        let num_relus = 1;//一个激活函数
 
-        let mac_key_a = F::uniform(&mut rng);
-        let mac_key_b = F::uniform(&mut rng);
+        let mac_key_a = F::uniform(&mut rng);//αi
+        let mac_key_b = F::uniform(&mut rng);//βi
 
-        let mut plain_x_s = Vec::with_capacity(num_relus);
-        let mut plain_results = Vec::with_capacity(num_relus);
+        let mut plain_x_s = Vec::with_capacity(num_relus);//明文
+        let mut plain_results = Vec::with_capacity(num_relus);//输出的明文结果
         // Server shares
         let mut server_output_shares = Vec::with_capacity(num_relus);
         let mut server_output_mac_shares = Vec::with_capacity(num_relus);
