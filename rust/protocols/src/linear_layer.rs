@@ -127,7 +127,7 @@ where
     /// 运行 client ACG protocol by Garbled circuit. 产生随机遮蔽向量ri，生成混淆电路
     /// 发送给混淆电路及ri线标签，server返回计算结果，生成mac值并发送ss给server
     ///acg by garbled circuit
-    
+    /* 
     pub fn offline_client_acg_gc_protocol
     <
         R: Read + Send+ Unpin+ std::io::Read, 
@@ -413,7 +413,7 @@ where
             client_input_labels: labels,//client input wires!
         })
     }
- 
+ */
     pub fn offline_server_acg_protocol<
         R: Read + Send + Unpin,
         W: Write + Send + Unpin,

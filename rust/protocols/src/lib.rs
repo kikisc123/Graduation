@@ -59,7 +59,7 @@ pub fn server_keygen<R: Read + Unpin>(
     Ok(key_share.receive(keys.msg()))
 }
 
-
+/* 
 pub fn acg_client_keygen<W: Write + Send+ std::io::Write>(
     writer: &mut IMuxSync<W>,
 ) -> Result<ClientFHE, bincode::Error> {
@@ -84,7 +84,7 @@ pub fn acg_server_keygen<R: Read + Send+ std::io::Read>(
     let mut key_share = KeyShare::new();
     Ok(key_share.receive(keys.msg()))
 }
-
+*/
 #[derive(Serialize)]
 pub struct OutMessage<'a, T: 'a + ?Sized, Type> {
     msg: &'a T,

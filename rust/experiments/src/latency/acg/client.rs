@@ -57,5 +57,5 @@ fn main() {
     };
     let architecture = (&network).into();//into:将network类型转换为输入类型
 //server直接用的network做的参数，一样的。。。
-    experiments::latency::client::acg(&server_addr, architecture, &mut rng);
+    experiments::latency::client::acg_gc(&server_addr, architecture, &mut rng);
 }

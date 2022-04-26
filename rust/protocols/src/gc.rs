@@ -260,11 +260,13 @@ where
         input_rands: &[P::Field],
         rng: &mut RNG,
     ) -> Result<ClientState, MpcError> {
+        
         let start_time = timer_start!(|| "ReLU offline protocol");
         let rcv_gc_time = timer_start!(|| "Receiving GCs");
         let mut gc_s = Vec::with_capacity(number_of_relus);
         let mut r_wires = Vec::with_capacity(number_of_relus);
 
+        
         let num_chunks = (number_of_relus as f64 / 8192.0).ceil() as usize;
         for i in 0..num_chunks {
             let in_msg: ClientGcMsgRcv = bytes::deserialize(reader)?;
