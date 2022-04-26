@@ -32,7 +32,7 @@ use algebra::{fields::near_mersenne_64::F,BigInteger64,Fp64};
 use algebra::{near_mersenne_64::FParameters,fields::PrimeField};
 use crypto_primitives::{AuthShare, Share};
 use scuttlebutt::Channel;
-use ocelot::ot::{AlszReceiver as OTReceiver, AlszSender as OTSender, Receiver, Sender};
+use ocelot::ot::{ChouOrlandiReceiver as OTReceiver, ChouOrlandiSender as OTSender, Receiver, Sender};
 use rayon::prelude::*;
 use rand::{Rng,SeedableRng};
 use rand_chacha::ChaChaRng;
@@ -237,12 +237,10 @@ where
         } else {
             randomizer_labels.len() / number_of_ACGs
         };
-        println!("11");
         for msg_contents in gc_s
             .chunks(8192)
             .zip(randomizer_labels.chunks(randomizer_label_per_ACG * 8192))
         {
-            println!("22");
             let sent_message = ServerGcMsgSend::new(&msg_contents);
             acg_serialize(writer, &sent_message)?;
             writer.flush().unwrap();
@@ -265,12 +263,10 @@ where
 
             let ot_time = timer_start!(|| "OT协议传送标签");
             let mut channel = Channel::new(r, w);
-            println!("1\n");
             let mut ot = OTSender::init(&mut channel, rng).unwrap();
-            println!("2\n");//运行到这了
-            println!("label's lenth={}",labels.len());
+            println!("OT send 1\n");//运行到这了
             ot.send(&mut channel, labels.as_slice(), rng).unwrap();
-            println!("3\n");
+            println!("OT send 2\n");
             timer_end!(ot_time);
         }
 
@@ -393,11 +389,11 @@ where
             let ot_time = timer_start!(|| "OT 协议接收标签");
             let mut channel = Channel::new(r, w);
             let mut ot = OTReceiver::init(&mut channel, rng).expect("should work");
-            println!("44OT\n");//OT传不过去？
+            println!("OT recv 1\n");//OT传不过去？
             let labels = ot
                 .receive(&mut channel, bs.as_slice(), rng)
                 .expect("should work");
-            println!("55OT\n");
+            println!("OT recv 2\n");
             let labels = labels
                 .into_iter()
                 .map(|l| Wire::from_block(l, 2))
