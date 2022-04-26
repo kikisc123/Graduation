@@ -32,7 +32,7 @@ use algebra::{fields::near_mersenne_64::F,BigInteger64,Fp64};
 use algebra::{near_mersenne_64::FParameters,fields::PrimeField};
 use crypto_primitives::{AuthShare, Share};
 use scuttlebutt::Channel;
-use ocelot::ot::{ChouOrlandiReceiver as OTReceiver, ChouOrlandiSender as OTSender, Receiver, Sender};
+use ocelot::ot::{AlszReceiver as OTReceiver, AlszSender as OTSender, Receiver, Sender};
 use rayon::prelude::*;
 use rand::{Rng,SeedableRng};
 use rand_chacha::ChaChaRng;
