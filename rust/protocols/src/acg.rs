@@ -264,7 +264,7 @@ where
             let ot_time = timer_start!(|| "OT协议传送标签");
             let mut channel = Channel::new(r, w);
             let mut ot = OTSender::init(&mut channel, rng).unwrap();
-            println!("OT send 1\n");//运行到这了
+            println!("OT send 123\n");//运行到这了
             ot.send(&mut channel, labels.as_slice(), rng).unwrap();
             println!("OT send 2\n");
             timer_end!(ot_time);
