@@ -137,8 +137,8 @@ where
     
     pub fn offline_client_acg_gc_protocol
     <
-        R: Read + Send+ Unpin+ std::io::Read, 
-        W: Write + Send+ Unpin+ std::io::Write, 
+        R: Read + Send, 
+        W: Write + Send, 
         RNG: CryptoRng + RngCore
         >(
         reader: &mut IMuxSync<R>,
@@ -327,7 +327,7 @@ where
         
         Ok(
             (
-                (server_r_mac_share, result, server_r_mac_share), 
+                (client_r_mac_share, result, client_y_mac_share), 
                 (alpha, beta)
             )
         )
@@ -337,8 +337,8 @@ where
     ///返回计算结果给client
     pub fn offline_server_acg_gc_protocol
     <
-        R: Read + Send+ Unpin+ std::io::Read, 
-        W: Write + Send+ Unpin+ std::io::Write, 
+        R: Read + Send, 
+        W: Write + Send, 
         RNG: RngCore + CryptoRng
     >(
         reader: &mut IMuxSync<R>,
@@ -409,7 +409,7 @@ where
         let client_input_wires:&[Wire]= &labels;
         let evaluators:&[GarbledCircuit]= &gc_s;
 
-        let rcv_time = timer_start!(|| "接收server的输入线标签");
+        let rcv_time = timer_start!(|| "接收Garbler的输入线标签");
         let in_msg: ClientLabelMsgRcv = acg_deserialize(reader)?;
         let mut garbler_wires = in_msg.msg();
         timer_end!(rcv_time);

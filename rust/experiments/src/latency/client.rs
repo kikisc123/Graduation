@@ -391,7 +391,7 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
     let (mut reader, mut writer) = acg_client_connect(server_addr);
 
     //let cfhe = acg_client_keygen(&mut writer).unwrap();//生成FHE所需key
-    writer.reset();//重置写入流数量
+    //writer.reset();//重置写入流数量
 
     let mut in_shares = BTreeMap::new();//Client's share,包含i层的share
     //let mut out_shares: BTreeMap<usize, Output<AuthAdditiveShare<F>>> = BTreeMap::new();//Server's share
@@ -410,30 +410,6 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
                 // 判断是卷积、池化还是全连接层
                 let (in_share, out_share) = match &linear_layer_info {//该层的acg输出 
                     LinearLayerInfo::Conv2d { .. } | LinearLayerInfo::FullyConnected | LinearLayerInfo::AvgPool { ..} |LinearLayerInfo::Identity => {
-                       //acg_handler 为SealClientACG（即Client_acg）
-                        /*let mut acg_handler = match &linear_layer_info {
-                            //如果是卷积层
-                            LinearLayerInfo::Conv2d { .. } => {
-                                //here have FHE！
-                                SealClientACG::Conv2D(client_acg::Conv2D::new(
-                                    &cfhe,
-                                    &linear_layer_info,
-                                    input_dims,
-                                    output_dims,
-                                ))
-                            }
-                            //如果是全连接层
-                            LinearLayerInfo::FullyConnected => {
-                                SealClientACG::FullyConnected(client_acg::FullyConnected::new(
-                                    &cfhe,
-                                    &linear_layer_info,
-                                    input_dims,
-                                    output_dims,
-                                ))
-                            }
-                            _ => unreachable!(),
-                        };
-                        */
                         //如果是卷积层或者全连接层，执行ACG协议,返回（input_share,output_share）
                         //返回两个值，为r_auth和linear_auth应该是要发给CDS用来对ri和Miri-si进行认证用的
                         //返回值in_share and out_share

@@ -486,23 +486,11 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
         match layer {
             Layer::NLL(NonLinearLayer::ReLU { .. }) => {}
             Layer::LL(layer) => {
-                let (shares, keys) = match &layer {//该层的acg输出，产生ss和share
+                let (shares, keys) = match &layer {//该层的acg输出，产生auth additive share。
                     LinearLayer::Conv2d { .. } | LinearLayer::FullyConnected { .. } |LinearLayer::AvgPool { .. } | LinearLayer::Identity { .. }=> {                         
-                        /*let mut acg_handler = match &layer {
-                            LinearLayer::Conv2d { .. } => SealServerACG::Conv2D(
-                                server_acg::Conv2D::new(&sfhe, &layer, &layer.kernel_to_repr()),
-                            ),
-                            LinearLayer::FullyConnected { .. } => {
-                                SealServerACG::FullyConnected(server_acg::FullyConnected::new(
-                                    &sfhe,
-                                    &layer,
-                                    &layer.kernel_to_repr(),
-                                ))
-                            }
-                            _ => unreachable!(),
-                        };
-                        */
-                        //返回那两个值
+                        //如果是卷积层或者全连接层，执行ACG协议,返回认证的秘密共享，以及mac密钥
+                        //返回值要发给CDS用来对ri和Miri-si进行认证用的
+                        //产生share
                         //返回值shares and keys
                         let number_of_ACGs=1;
                         ACGProtocol::<TenBitExpParams>::offline_client_acg_gc_protocol(
