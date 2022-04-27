@@ -1,4 +1,4 @@
-use crate::{InMessage, OutMessage};
+use crate::{acg_utils,InMessage, OutMessage};
 use algebra::{
     fixed_point::{FixedPoint, FixedPointParameters},
     fp_64::Fp64Parameters,
@@ -15,7 +15,7 @@ use crypto_primitives::{
         },
     },
 };
-use io_utils::imux::IMuxSync;
+//use io_utils::imux::IMuxSync;
 use neural_network::{
     tensors::{Input,Output},
 };
@@ -37,6 +37,8 @@ use rayon::prelude::*;
 use rand::{Rng,SeedableRng};
 use rand_chacha::ChaChaRng;
 
+
+#[derive(Default)]
 pub struct ACGProtocol<P: FixedPointParameters> {
     _share: PhantomData<P>,
 }
@@ -81,30 +83,6 @@ const RANDOMNESS: [u8; 32] = [
 ];
 
 
-#[inline]
-pub fn acg_serialize<W: std::io::Write + Send, T: ?Sized>(
-    writer: &mut IMuxSync<W>,
-    value: &T,
-) -> Result<(), bincode::Error>
-where
-    T: serde::Serialize,
-{
-    let bytes: Vec<u8> = bincode::serialize(value)?;
-    let _ = writer.write(&bytes)?;
-    writer.flush()?;
-    Ok(())
-}
-
-#[inline]
-pub fn acg_deserialize<R, T>(reader: &mut IMuxSync<R>) -> bincode::Result<T>
-where
-    R: std::io::Read + Send,
-    T: serde::de::DeserializeOwned,
-{
-    let bytes: Vec<u8> = reader.read()?;
-    bincode::deserialize(&bytes[..])
-}
-
 pub fn u128_from_share<P: FixedPointParameters>(s: AdditiveShare<P>) -> u128
 where
     <P::Field as PrimeField>::Params: Fp64Parameters,
@@ -128,7 +106,7 @@ impl<P: FixedPointParameters> ACGProtocol<P>
 where
     P: FixedPointParameters,//+ crypto_primitives::AuthShare,
     <P::Field as PrimeField>::Params: Fp64Parameters,
-    P::Field: PrimeField<BigInt = <<P::Field as PrimeField>::Params as FpParameters>::BigInt>,
+    P::Field: PrimeField<BigInt = BigInteger64>,
     P::Field: AuthShare,
 {
     /// 运行 client ACG protocol by Garbled circuit. 产生随机遮蔽向量ri，生成混淆电路
@@ -137,12 +115,9 @@ where
     
     pub fn offline_client_acg_gc_protocol
     <
-        R: Read + Send, 
-        W: Write + Send, 
         RNG: CryptoRng + RngCore
         >(
-        reader: &mut IMuxSync<R>,
-        writer: &mut IMuxSync<W>,
+        server_addr: &str,
         number_of_ACGs: usize,
         rng: &mut RNG,
     ) ->Result<
@@ -156,6 +131,7 @@ where
         ),
         bincode::Error,
     > {
+        let (mut reader, mut writer) = acg_utils::acg_client_connect(server_addr);
         let start_time = timer_start!(|| "预处理阶段客户端ACG协议(by GC)");
 
         // Client产生ri
@@ -242,11 +218,14 @@ where
             .zip(randomizer_labels.chunks(randomizer_label_per_ACG * 8192))
         {
             let sent_message = ServerGcMsgSend::new(&msg_contents);
-            acg_serialize(writer, &sent_message)?;
-            writer.flush().unwrap();
+            //acg_utils::acg_serialize(writer, &sent_message).unwrap();
+            //writer.flush().unwrap();
+            let bytes: Vec<u8> = bincode::serialize(&sent_message)?;
+            let _ = writer.write(&bytes)?;
+            writer.flush()?;
         }
         timer_end!(send_gc_time);
-/* 
+ 
         add_to_trace!(|| "GC Communication", || format!(
             "Read {} bytes\nWrote {} bytes",
             reader.count(),
@@ -254,7 +233,7 @@ where
         ));
         reader.reset();
         writer.reset();
-*/
+
 
         //OT协议传送标签
         if number_of_ACGs != 0 {
@@ -263,6 +242,7 @@ where
 
             let ot_time = timer_start!(|| "OT协议传送标签");
             let mut channel = Channel::new(r, w);
+            
             let mut ot = OTSender::init(&mut channel, rng).unwrap();
             println!("OT send 1\n");//运行到这了
             ot.send(&mut channel, labels.as_slice(), rng).unwrap();
@@ -295,11 +275,18 @@ where
 
         let send_garbler_input_time = timer_start!(|| "发送Garbler输入线标签");
         let sent_message = ServerLabelMsgSend::new(wires.as_slice());
-        acg_serialize(writer, &sent_message)?;
+        //acg_utils::acg_serialize(writer, &sent_message).unwrap();
+        let bytes: Vec<u8> = bincode::serialize(&sent_message)?;
+        let _ = writer.write(&bytes)?;
+        writer.flush()?;
         timer_end!(send_garbler_input_time);
 
         let recv_result_time = timer_start!(|| "接收混淆电路计算结果");
-        let recv: ServerShareMsgRcv<P> = acg_deserialize(reader)?;
+        let recv: ServerShareMsgRcv<P> = {
+            let bytes: Vec<u8> = reader.read()?;
+            bincode::deserialize(&bytes[..])
+        }.unwrap();
+        //acg_utils::acg_deserialize(reader).unwrap();
         let results=recv.msg();
         timer_end!(recv_result_time);
 
@@ -318,9 +305,15 @@ where
 
         let send_mac_time = timer_start!(|| "向server发送mac值");
         let sent_message_y = MacShareMsgSend::new(&server_y_mac_share);
-        acg_serialize(writer, &sent_message_y)?;
+        //acg_utils::acg_serialize(writer, &sent_message_y).unwrap();
+        let bytes: Vec<u8> = bincode::serialize(&sent_message_y)?;
+        let _ = writer.write(&bytes)?;
+        writer.flush()?;
         let sent_message_r = MacShareMsgSend::new(&server_r_mac_share);
-        acg_serialize(writer, &sent_message_r)?;
+        //acg_utils::acg_serialize(writer, &sent_message_r).unwrap();
+        let bytes: Vec<u8> = bincode::serialize(&sent_message_r)?;
+        let _ = writer.write(&bytes)?;
+        writer.flush()?;
         timer_end!(send_mac_time);
         
         timer_end!(start_time);
@@ -337,12 +330,9 @@ where
     ///返回计算结果给client
     pub fn offline_server_acg_gc_protocol
     <
-        R: Read + Send, 
-        W: Write + Send, 
         RNG: RngCore + CryptoRng
     >(
-        reader: &mut IMuxSync<R>,
-        writer: &mut IMuxSync<W>,
+        server_addr: &str,
         number_of_ACGs: usize,
         shares: &[AdditiveShare<P>],
         rng: &mut RNG,
@@ -353,6 +343,7 @@ where
         ),
         bincode::Error,
     >   {
+        let (mut reader, mut writer) = acg_utils::acg_server_connect(server_addr);
         use fancy_garbling::util::*;
         let start_time = timer_start!(|| "预处理阶段_服务器端_ACG协议(by GC)");
         let p = u128::from(<<P::Field as PrimeField>::Params>::MODULUS.0);
@@ -364,7 +355,11 @@ where
         
         let num_chunks = (number_of_ACGs as f64 / 8192.0).ceil() as usize;
         for i in 0..num_chunks {
-            let in_msg: ClientGcMsgRcv = acg_deserialize(reader)?;
+            let in_msg: ClientGcMsgRcv = {
+                let bytes: Vec<u8> = reader.read()?;
+                bincode::deserialize(&bytes[..])
+            }.unwrap();
+            //acg_utils::acg_deserialize(reader).unwrap();
             let (gc_chunks, r_wire_chunks) = in_msg.msg();
             
             gc_s.extend(gc_chunks);
@@ -372,7 +367,7 @@ where
         }
         timer_end!(rcv_gc_time);
 
-        //assert_eq!(gc_s.len(), number_of_ACGs);
+        assert_eq!(gc_s.len(), number_of_ACGs);
         use num_traits::identities::Zero;
         let shares = vec![AdditiveShare::<TenBitExpParams>::zero(); number_of_ACGs];
         let bs = shares
@@ -388,8 +383,10 @@ where
 
             let ot_time = timer_start!(|| "OT 协议接收标签");
             let mut channel = Channel::new(r, w);
+            println!("test1\n");
             let mut ot = OTReceiver::init(&mut channel, rng).expect("should work");
-            println!("OT recv 1\n");//OT传不过去？
+            println!("test2\n");
+            println!("OT recv 1\n");//OT接收不到？
             let labels = ot
                 .receive(&mut channel, bs.as_slice(), rng)
                 .expect("should work");
@@ -410,7 +407,11 @@ where
         let evaluators:&[GarbledCircuit]= &gc_s;
 
         let rcv_time = timer_start!(|| "接收Garbler的输入线标签");
-        let in_msg: ClientLabelMsgRcv = acg_deserialize(reader)?;
+        let in_msg: ClientLabelMsgRcv = {
+            let bytes: Vec<u8> = reader.read()?;
+            bincode::deserialize(&bytes[..])
+        }.unwrap();
+        //acg_utils::acg_deserialize(reader).unwrap();
         let mut garbler_wires = in_msg.msg();
         timer_end!(rcv_time);
 
@@ -443,13 +444,24 @@ where
 
         let reslut_time = timer_start!(|| "将计算混淆电路GC结果发送给client");
         let sent_message = ClientShareMsgSend::new(&results);
-        acg_serialize(writer, &sent_message)?;
+        //acg_utils::acg_serialize(writer, &sent_message).unwrap();
+        let bytes: Vec<u8> = bincode::serialize(&sent_message)?;
+        let _ = writer.write(&bytes)?;
+        writer.flush()?;
         timer_end!(reslut_time);
 
         let recv_mac_time = timer_start!(|| "接收mac值");
-        let in_msg: MacShareMsgRcv = acg_deserialize(reader)?;
+        let in_msg: MacShareMsgRcv = {
+            let bytes: Vec<u8> = reader.read()?;
+            bincode::deserialize(&bytes[..])
+        }.unwrap();
+        //acg_utils::acg_deserialize(reader).unwrap();
         let server_y_mac_share=in_msg.msg();
-        let in_msg: MacShareMsgRcv = acg_deserialize(reader)?;
+        let in_msg: MacShareMsgRcv = {
+            let bytes: Vec<u8> = reader.read()?;
+            bincode::deserialize(&bytes[..])
+        }.unwrap();
+        //acg_utils::acg_deserialize(reader).unwrap();
         let server_r_mac_share=in_msg.msg();
         timer_end!(recv_mac_time);
 

@@ -1,7 +1,6 @@
 use algebra::fixed_point::FixedPoint;
 use async_std::io::{Read, Write};
 use io_utils::imux::IMuxAsync;
-use io_utils::imux::IMuxSync;
 use protocols_sys::{ClientFHE, KeyShare, ServerFHE};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -15,6 +14,7 @@ extern crate ndarray;
 
 pub mod acg;
 pub mod bytes;
+pub mod acg_utils;
 pub mod cds;
 pub mod gc;
 pub mod linear_layer;
