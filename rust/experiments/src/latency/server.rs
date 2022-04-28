@@ -494,7 +494,8 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
                         //返回值shares and keys
                         let number_of_ACGs=1;
                         ACGProtocol::<TenBitExpParams>::offline_client_acg_gc_protocol(
-                            &server_addr,
+                            &mut reader,
+                            &mut writer,
                             number_of_ACGs,
                             rng,
                         )

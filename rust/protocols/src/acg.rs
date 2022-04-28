@@ -36,6 +36,12 @@ use ocelot::ot::{AlszReceiver as OTReceiver, AlszSender as OTSender, Receiver, S
 use rayon::prelude::*;
 use rand::{Rng,SeedableRng};
 use rand_chacha::ChaChaRng;
+use io_utils::imux::IMuxSync;
+use io_utils::{counting::CountingIO};
+use std::{
+    io::{BufReader, BufWriter},
+    net::{TcpListener, TcpStream},
+};
 
 
 #[derive(Default)]
@@ -112,12 +118,13 @@ where
     /// 运行 client ACG protocol by Garbled circuit. 产生随机遮蔽向量ri，生成混淆电路
     /// 发送给混淆电路及ri线标签，server返回计算结果，生成mac值并发送ss给server
     ///acg by garbled circuit
-    
+    //暂时有问题，见运行
     pub fn offline_client_acg_gc_protocol
     <
         RNG: CryptoRng + RngCore
         >(
-        server_addr: &str,
+            reader: &mut IMuxSync<CountingIO<BufReader<TcpStream>>>,
+            writer: &mut IMuxSync<CountingIO<BufWriter<TcpStream>>>,
         number_of_ACGs: usize,
         rng: &mut RNG,
     ) ->Result<
@@ -131,7 +138,7 @@ where
         ),
         bincode::Error,
     > {
-        let (mut reader, mut writer) = acg_utils::acg_client_connect(server_addr);
+        //let (mut reader, mut writer) = acg_utils::acg_server_connect(server_addr);
         let start_time = timer_start!(|| "预处理阶段客户端ACG协议(by GC)");
 
         // Client产生ri
@@ -278,7 +285,7 @@ where
         //acg_utils::acg_serialize(writer, &sent_message).unwrap();
         let bytes: Vec<u8> = bincode::serialize(&sent_message)?;
         let _ = writer.write(&bytes)?;
-        writer.flush()?;
+        writer.flush();
         timer_end!(send_garbler_input_time);
 
         let recv_result_time = timer_start!(|| "接收混淆电路计算结果");
@@ -332,7 +339,8 @@ where
     <
         RNG: RngCore + CryptoRng
     >(
-        server_addr: &str,
+        reader: &mut IMuxSync<CountingIO<BufReader<TcpStream>>>,
+        writer: &mut IMuxSync<CountingIO<BufWriter<TcpStream>>>,
         number_of_ACGs: usize,
         shares: &[AdditiveShare<P>],
         rng: &mut RNG,
@@ -343,7 +351,7 @@ where
         ),
         bincode::Error,
     >   {
-        let (mut reader, mut writer) = acg_utils::acg_server_connect(server_addr);
+        //let (mut reader, mut writer) = acg_utils::acg_client_connect(server_addr);
         use fancy_garbling::util::*;
         let start_time = timer_start!(|| "预处理阶段_服务器端_ACG协议(by GC)");
         let p = u128::from(<<P::Field as PrimeField>::Params>::MODULUS.0);

@@ -420,7 +420,8 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
                         shares.push(share);
                         //ACG协议里面client的执行改为GC里面server的执行
                         ACGProtocol::<TenBitExpParams>::offline_server_acg_gc_protocol(
-                            &server_addr,
+                            &mut reader,
+                            &mut writer,
                             1,
                             &shares,
                              rng

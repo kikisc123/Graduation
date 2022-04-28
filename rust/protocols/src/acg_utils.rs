@@ -16,7 +16,9 @@ pub fn acg_client_connect(
     let mut readers = Vec::with_capacity(16);
     let mut writers = Vec::with_capacity(16);
     for _ in 0..16 {
+        println!("test client 1\n");
         let stream = TcpStream::connect(addr).unwrap();
+        println!("test client 2\n");
         readers.push(CountingIO::new(BufReader::new(stream.try_clone().unwrap())));
         writers.push(CountingIO::new(BufWriter::new(stream)));
     }
@@ -29,7 +31,9 @@ pub fn acg_server_connect(
     IMuxSync<CountingIO<BufReader<TcpStream>>>,
     IMuxSync<CountingIO<BufWriter<TcpStream>>>,
 ) {
+    println!("test server 1\n");
     let listener = TcpListener::bind(addr).unwrap();
+    println!("test server 2\n");
     let mut incoming = listener.incoming();
     let mut readers = Vec::with_capacity(16);
     let mut writers = Vec::with_capacity(16);
