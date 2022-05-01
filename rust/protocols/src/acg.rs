@@ -33,6 +33,7 @@ use algebra::{near_mersenne_64::FParameters,fields::PrimeField};
 use crypto_primitives::{AuthShare, Share};
 use scuttlebutt::Channel;
 use ocelot::ot::{AlszReceiver as OTReceiver, AlszSender as OTSender, Receiver, Sender};
+use ocelot::ot::{ChouOrlandiSender,ChouOrlandiReceiver};
 use rayon::prelude::*;
 use rand::{Rng,SeedableRng};
 use rand_chacha::ChaChaRng;
@@ -116,17 +117,18 @@ where
     P::Field: AuthShare,
 {
     /// 运行 client ACG protocol by Garbled circuit. 产生随机遮蔽向量ri，生成混淆电路
-    /// 发送给混淆电路及ri线标签，server返回计算结果，生成mac值并发送ss给server
+    /// 发送混淆电路及ri线标签，server返回计算结果，生成mac值并发送ss给server
     ///acg by garbled circuit
     //暂时有问题，见运行
     pub fn offline_client_acg_gc_protocol
     <
         RNG: CryptoRng + RngCore
         >(
-            reader: &mut IMuxSync<CountingIO<BufReader<TcpStream>>>,
-            writer: &mut IMuxSync<CountingIO<BufWriter<TcpStream>>>,
-        number_of_ACGs: usize,
-        rng: &mut RNG,
+            server_addr: &str,
+            //reader: &mut IMuxSync<CountingIO<BufReader<TcpStream>>>,
+            //writer: &mut IMuxSync<CountingIO<BufWriter<TcpStream>>>,
+            number_of_ACGs: usize,
+            rng: &mut RNG,
     ) ->Result<
         (
             (
@@ -138,7 +140,7 @@ where
         ),
         bincode::Error,
     > {
-        //let (mut reader, mut writer) = acg_utils::acg_server_connect(server_addr);
+        let (mut reader, mut writer) = acg_utils::acg_server_connect(server_addr);
         let start_time = timer_start!(|| "预处理阶段客户端ACG协议(by GC)");
 
         // Client产生ri
@@ -170,7 +172,7 @@ where
             .unzip_into_vecs(&mut encoders, &mut gc_s);
         timer_end!(garble_time);
 
-        let encode_time = timer_start!(|| "对输入进行编码");
+        let encode_time = timer_start!(|| "对混淆电路输入进行编码");
         //这是输入的个数
         let num_garbler_inputs = c.num_garbler_inputs();
         let num_evaluator_inputs = c.num_evaluator_inputs();
@@ -186,7 +188,7 @@ where
 
         //编码输入标签
         for enc in encoders.iter() {
-            let r = P::Field::uniform(rng);
+            let r = P::Field::uniform(rng);//ri!
             output_randomizers.push(r);
             let r_bits: u64 = ((-r).into_repr()).into();
             let r_bits = fancy_garbling::util::u128_to_bits(
@@ -242,20 +244,6 @@ where
         writer.reset();
 
 
-        //OT协议传送标签
-        if number_of_ACGs != 0 {
-            let r = reader.get_mut_ref().remove(0);
-            let w = writer.get_mut_ref().remove(0);
-
-            let ot_time = timer_start!(|| "OT协议传送标签");
-            let mut channel = Channel::new(r, w);
-            
-            let mut ot = OTSender::init(&mut channel, rng).unwrap();
-            println!("OT send 1\n");//运行到这了
-            ot.send(&mut channel, labels.as_slice(), rng).unwrap();
-            println!("OT send 2\n");
-            timer_end!(ot_time);
-        }
 
         let encode_garbler_input_time = timer_start!(|| "对Garbler输入进行编码");
         //产生share
@@ -287,6 +275,23 @@ where
         let _ = writer.write(&bytes)?;
         writer.flush();
         timer_end!(send_garbler_input_time);
+
+
+        //OT协议传送标签
+        if number_of_ACGs != 0 {
+            let r = reader.get_mut_ref().remove(0);
+            let w = writer.get_mut_ref().remove(0);
+
+            let ot_time = timer_start!(|| "OT协议传送标签");
+            let mut channel = Channel::new(r, w);
+            
+            let mut ot = OTSender::init(&mut channel, rng).unwrap();
+            //let mut ot = ChouOrlandiSender::init(&mut channel, rng).unwrap();
+            println!("OT send 1\n");//运行到这了，为何运行不下去了？？？？
+            ot.send(&mut channel, labels.as_slice(), rng).unwrap();
+            println!("OT send 2\n");
+            timer_end!(ot_time);
+        }
 
         let recv_result_time = timer_start!(|| "接收混淆电路计算结果");
         let recv: ServerShareMsgRcv<P> = {
@@ -333,14 +338,15 @@ where
         )
     }
 
-    /// 运行 server ACG protocol. 接收GC，ri标签，计算混淆电路，Miri-si
+    /// 运行 server ACG protocol.产生随机向量si， 接收GC，ri标签，计算混淆电路，Miri-si
     ///返回计算结果给client
     pub fn offline_server_acg_gc_protocol
     <
         RNG: RngCore + CryptoRng
     >(
-        reader: &mut IMuxSync<CountingIO<BufReader<TcpStream>>>,
-        writer: &mut IMuxSync<CountingIO<BufWriter<TcpStream>>>,
+        server_addr: &str,
+        //reader: &mut IMuxSync<CountingIO<BufReader<TcpStream>>>,
+        //writer: &mut IMuxSync<CountingIO<BufWriter<TcpStream>>>,
         number_of_ACGs: usize,
         shares: &[AdditiveShare<P>],
         rng: &mut RNG,
@@ -351,7 +357,7 @@ where
         ),
         bincode::Error,
     >   {
-        //let (mut reader, mut writer) = acg_utils::acg_client_connect(server_addr);
+        let (mut reader, mut writer) = acg_utils::acg_client_connect(server_addr);//之前客户端和服务器TCP连接失败的原因是前面已经连接过一次了，绝对不是代码问题！Got！
         use fancy_garbling::util::*;
         let start_time = timer_start!(|| "预处理阶段_服务器端_ACG协议(by GC)");
         let p = u128::from(<<P::Field as PrimeField>::Params>::MODULUS.0);
@@ -375,6 +381,14 @@ where
         }
         timer_end!(rcv_gc_time);
 
+        add_to_trace!(|| "GC Communication", || format!(
+            "Read {} bytes\nWrote {} bytes",
+            reader.count(),
+            writer.count()
+        ));
+        reader.reset();
+        writer.reset();
+
         assert_eq!(gc_s.len(), number_of_ACGs);
         use num_traits::identities::Zero;
         let shares = vec![AdditiveShare::<TenBitExpParams>::zero(); number_of_ACGs];
@@ -383,6 +397,19 @@ where
             .flat_map(|s| u128_to_bits(u128_from_share(*s), field_size))
             .map(|b| b == 1)
             .collect::<Vec<_>>();
+        
+
+            
+        let rcv_time = timer_start!(|| "接收Garbler的输入线标签");
+        let in_msg: ClientLabelMsgRcv = {
+            let bytes: Vec<u8> = reader.read()?;
+            bincode::deserialize(&bytes[..])
+        }.unwrap();
+        //acg_utils::acg_deserialize(reader).unwrap();
+        let mut garbler_wires = in_msg.msg();
+        timer_end!(rcv_time);
+
+
         //OT协议接收标签
         //client输入线标签
         let labels = if number_of_ACGs != 0 {
@@ -392,11 +419,13 @@ where
             let ot_time = timer_start!(|| "OT 协议接收标签");
             let mut channel = Channel::new(r, w);
             println!("test1\n");
+
             let mut ot = OTReceiver::init(&mut channel, rng).expect("should work");
+            //let mut ot = ChouOrlandiReceiver::init(&mut channel, rng).expect("should work");
             println!("test2\n");
             println!("OT recv 1\n");//OT接收不到？
             let labels = ot
-                .receive(&mut channel, bs.as_slice(), rng)
+                .receive(&mut channel, bs.as_slice(), rng)//我知道了！之前ot.init里不知为啥已经运行了ot.recv,这里载运就会卡住不再运行！
                 .expect("should work");
             println!("OT recv 2\n");
             let labels = labels
@@ -414,18 +443,10 @@ where
         let client_input_wires:&[Wire]= &labels;
         let evaluators:&[GarbledCircuit]= &gc_s;
 
-        let rcv_time = timer_start!(|| "接收Garbler的输入线标签");
-        let in_msg: ClientLabelMsgRcv = {
-            let bytes: Vec<u8> = reader.read()?;
-            bincode::deserialize(&bytes[..])
-        }.unwrap();
-        //acg_utils::acg_deserialize(reader).unwrap();
-        let mut garbler_wires = in_msg.msg();
-        timer_end!(rcv_time);
-
         let eval_time = timer_start!(|| "计算混淆电路GC");
-        let b = CircuitBuilder::new();
+        let mut b = CircuitBuilder::new();
         /*电路设计 */
+        crypto_primitives::gc::relu::<P>(&mut b, 1).unwrap();
         let c=b.finish();
         let num_evaluator_inputs = c.num_evaluator_inputs();
         let num_garbler_inputs = c.num_garbler_inputs();

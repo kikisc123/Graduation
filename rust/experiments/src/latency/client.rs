@@ -387,7 +387,7 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
     rng: &mut R,
 ) {
     //通过ip+port连接client和server，并用reader和writer相互读写数据
-    let (mut reader, mut writer) = acg_client_connect(server_addr);
+    //let (mut reader, mut writer) = acg_client_connect(server_addr);
 
     //let cfhe = acg_client_keygen(&mut writer).unwrap();//生成FHE所需key
     //writer.reset();//重置写入流数量
@@ -395,7 +395,7 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
     let mut in_shares = BTreeMap::new();//Client's share,包含i层的share
     //let mut out_shares: BTreeMap<usize, Output<AuthAdditiveShare<F>>> = BTreeMap::new();//Server's share
     let mut out_shares = BTreeMap::new();
-    let linear_time = timer_start!(|| "Linear layers preprossing phase(ACG protocol by GC)");
+    let linear_time = timer_start!(|| "预处理阶段线性层");
     for (i, layer) in architecture.layers.iter().enumerate() {
         //判断是否为线性层
         match layer {
@@ -420,8 +420,9 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
                         shares.push(share);
                         //ACG协议里面client的执行改为GC里面server的执行
                         ACGProtocol::<TenBitExpParams>::offline_server_acg_gc_protocol(
-                            &mut reader,
-                            &mut writer,
+                            &server_addr,
+                            //&mut reader,
+                            //&mut writer,
                             1,
                             &shares,
                              rng
@@ -489,9 +490,9 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
         }
     }
     timer_end!(linear_time);
-    add_to_trace!(|| "Communication", || format!(
+    /*add_to_trace!(|| "Communication", || format!(
         "Read {} bytes\nWrote {} bytes",
         reader.count(),
         writer.count()
-    ));
+    ));*/
 }

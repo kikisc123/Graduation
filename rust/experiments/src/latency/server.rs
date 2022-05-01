@@ -465,10 +465,10 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
     rng: &mut R,
 ) {
     //连接server和client
-    let (mut reader, mut writer) = acg_server_connect(server_addr);
+    //let (mut reader, mut writer) = acg_server_connect(server_addr);
 
     //let sfhe = acg_server_keygen(&mut reader).unwrap();//接收FHE所需key
-    reader.reset();
+   // reader.reset();
 /* 
     let mut linear_shares: BTreeMap<usize,
         (
@@ -494,8 +494,9 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
                         //返回值shares and keys
                         let number_of_ACGs=1;
                         ACGProtocol::<TenBitExpParams>::offline_client_acg_gc_protocol(
-                            &mut reader,
-                            &mut writer,
+                            &server_addr,
+                            //&mut reader,
+                            //&mut writer,
                             number_of_ACGs,
                             rng,
                         )
@@ -574,9 +575,9 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
         }
     }
     timer_end!(linear_time);
-    add_to_trace!(|| "Communication", || format!(
+ /*    add_to_trace!(|| "Communication", || format!(
         "Read {} bytes\nWrote {} bytes",
         reader.count(),
         writer.count()
-    ));
+    ));*/
 }
