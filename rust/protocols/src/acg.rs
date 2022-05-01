@@ -244,6 +244,18 @@ where
         writer.reset();
 
 
+        //OT协议传送标签
+        if number_of_ACGs != 0 {
+            let r = reader.get_mut_ref().remove(0);
+            let w = writer.get_mut_ref().remove(0);
+
+            let ot_time = timer_start!(|| "OT协议传送标签");
+            let mut channel = Channel::new(r, w);
+            
+            let mut ot = OTSender::init(&mut channel, rng).unwrap();
+            ot.send(&mut channel, labels.as_slice(), rng).unwrap();
+            timer_end!(ot_time);
+        }
 
         let encode_garbler_input_time = timer_start!(|| "对Garbler输入进行编码");
         //产生share
@@ -276,22 +288,6 @@ where
         writer.flush();
         timer_end!(send_garbler_input_time);
 
-
-        //OT协议传送标签
-        if number_of_ACGs != 0 {
-            let r = reader.get_mut_ref().remove(0);
-            let w = writer.get_mut_ref().remove(0);
-
-            let ot_time = timer_start!(|| "OT协议传送标签");
-            let mut channel = Channel::new(r, w);
-            
-            let mut ot = OTSender::init(&mut channel, rng).unwrap();
-            //let mut ot = ChouOrlandiSender::init(&mut channel, rng).unwrap();
-            println!("OT send 1\n");//运行到这了，为何运行不下去了？？？？
-            ot.send(&mut channel, labels.as_slice(), rng).unwrap();
-            println!("OT send 2\n");
-            timer_end!(ot_time);
-        }
 
         let recv_result_time = timer_start!(|| "接收混淆电路计算结果");
         let recv: ServerShareMsgRcv<P> = {
@@ -391,14 +387,34 @@ where
 
         assert_eq!(gc_s.len(), number_of_ACGs);
         use num_traits::identities::Zero;
-        let shares = vec![AdditiveShare::<TenBitExpParams>::zero(); number_of_ACGs];
+        let shares = vec![AdditiveShare::<TenBitExpParams>::zero(); number_of_ACGs*2];
         let bs = shares
             .iter()
             .flat_map(|s| u128_to_bits(u128_from_share(*s), field_size))
             .map(|b| b == 1)
             .collect::<Vec<_>>();
         
+      //OT协议接收标签
+        //client输入线标签
+        let labels = if number_of_ACGs != 0 {
+            let r = reader.get_mut_ref().remove(0);
+            let w = writer.get_mut_ref().remove(0);
 
+            let ot_time = timer_start!(|| "OT 协议接收标签");
+            let mut channel = Channel::new(r, w);
+            let mut ot = OTReceiver::init(&mut channel, rng).expect("should work");
+            let labels = ot
+                .receive(&mut channel, bs.as_slice(), rng)//我知道了！之前ot.init里不知为啥已经运行了ot.recv,这里载运就会卡住不再运行！,与上面server不运行一样的道理! 2022/5/1
+                .expect("should work");
+            let labels = labels
+                .into_iter()
+                .map(|l| Wire::from_block(l, 2))
+                .collect::<Vec<_>>();
+            timer_end!(ot_time);
+            labels
+        } else {
+            Vec::new()
+        };
             
         let rcv_time = timer_start!(|| "接收Garbler的输入线标签");
         let in_msg: ClientLabelMsgRcv = {
@@ -410,33 +426,6 @@ where
         timer_end!(rcv_time);
 
 
-        //OT协议接收标签
-        //client输入线标签
-        let labels = if number_of_ACGs != 0 {
-            let r = reader.get_mut_ref().remove(0);
-            let w = writer.get_mut_ref().remove(0);
-
-            let ot_time = timer_start!(|| "OT 协议接收标签");
-            let mut channel = Channel::new(r, w);
-            println!("test1\n");
-
-            let mut ot = OTReceiver::init(&mut channel, rng).expect("should work");
-            //let mut ot = ChouOrlandiReceiver::init(&mut channel, rng).expect("should work");
-            println!("test2\n");
-            println!("OT recv 1\n");//OT接收不到？
-            let labels = ot
-                .receive(&mut channel, bs.as_slice(), rng)//我知道了！之前ot.init里不知为啥已经运行了ot.recv,这里载运就会卡住不再运行！
-                .expect("should work");
-            println!("OT recv 2\n");
-            let labels = labels
-                .into_iter()
-                .map(|l| Wire::from_block(l, 2))
-                .collect::<Vec<_>>();
-            timer_end!(ot_time);
-            labels
-        } else {
-            Vec::new()
-        };
         
         //需要gc_s,server_input_wires,client_input_wires
         let server_input_wires:&[Wire]= &r_wires;
