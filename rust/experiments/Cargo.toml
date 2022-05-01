@@ -88,6 +88,14 @@ path = "src/latency/input_auth/client.rs"
 #path = "src/latency/input_auth_ltme/client.rs"
 
 [[bin]]
+name = "acg_gc-server"
+path = "src/latency/acg_gc/server.rs"
+
+[[bin]]
+name = "acg_gc-client"
+path = "src/latency/acg_gc/client.rs"
+
+[[bin]]
 name = "acg-server"
 path = "src/latency/acg/server.rs"
 

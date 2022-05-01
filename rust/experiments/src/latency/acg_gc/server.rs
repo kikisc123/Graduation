@@ -19,14 +19,6 @@ fn get_args() -> ArgMatches<'static> {
                 .required(true),
         )
         .arg(
-            Arg::with_name("ip")
-                .short("i")
-                .long("ip")
-                .takes_value(true)
-                .help("Server IP address")
-                .required(true),
-        )
-        .arg(
             Arg::with_name("port")
                 .short("p")
                 .long("port")
@@ -38,24 +30,18 @@ fn get_args() -> ArgMatches<'static> {
 }
 
 fn main() {
-    //torch.nn 提供了很多实现神经网络中具体功能的类，例如 卷积层torch.nn.Conv
-    let vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());//
-    let mut rng = ChaChaRng::from_seed(RANDOMNESS);//用已给随机数种子产生随机数rng
-    let args = get_args();//运行的linux指令
+    let vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
+    let mut rng = ChaChaRng::from_seed(RANDOMNESS);
+    let args = get_args();
 
-    let ip = args.value_of("ip").unwrap();
     let port = args.value_of("port").unwrap_or("8000");
-    let server_addr = format!("{}:{}", ip, port);//获得Linux指令中的服务器ip
+    let server_addr = format!("0.0.0.0:{}", port);
 
     let model = clap::value_t!(args.value_of("model"), usize).unwrap();
     let network = match model {
-        //0表示mnist神经网络模型
         0 => construct_mnist(Some(&vs.root()), 1, &mut rng),
-        //1表示minionn模型
         1 => construct_minionn(Some(&vs.root()), 1, &mut rng),
         _ => panic!(),
     };
-    let architecture = (&network).into();//into:将network类型转换为输入类型
-//server直接用的network做的参数，一样的。。。
-    experiments::latency::client::acg(&server_addr, architecture, &mut rng);
+    experiments::latency::server::acg_gc(&server_addr, network, &mut rng);
 }
