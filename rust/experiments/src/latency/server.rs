@@ -466,22 +466,11 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
 ) {
     //连接server和client
     //let (mut reader, mut writer) = acg_server_connect(server_addr);
+    //转到ACG协议实现时连接！
 
-    //let sfhe = acg_server_keygen(&mut reader).unwrap();//接收FHE所需key
-   // reader.reset();
-/* 
-    let mut linear_shares: BTreeMap<usize,
-        (
-            Input<AuthAdditiveShare<F>>,
-            Output<F>,
-            Output<AuthAdditiveShare<F>>,
-        ),
-    > = BTreeMap::new();//第一个，要输出的mac及share
-    let mut mac_keys: BTreeMap<usize, (F, F)> = BTreeMap::new();//第二个
-*/
     let mut linear_shares = BTreeMap::new();
     let mut mac_keys = BTreeMap::new();
-    let linear_time = timer_start!(|| "Linear layers offline phase");
+    let linear_time = timer_start!(|| "预处理阶段线性层");
     for (i, layer) in nn.layers.iter().enumerate() {
         match layer {
             Layer::NLL(NonLinearLayer::ReLU { .. }) => {}
@@ -502,72 +491,7 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
                         )
                         .unwrap()
                     }
-                    /* 
-                    //如果是池化层
-                    LinearLayer::AvgPool { dims, .. } | LinearLayer::Identity { dims } => {
-                        let in_zero = Output::zeros(dims.input_dimensions());
-                        // If the layer comes after a linear layer, apply the function to
-                            // the last layer's output share MAC
-                            let prev_mac_keys = mac_keys.get(&(i - 1)).unwrap();
-                            let prev_output_share = &linear_shares.get(&(i - 1)).unwrap().2;
-                            let mut output_share = Output::zeros(dims.output_dimensions());
-                            layer.evaluate_naive_auth(prev_output_share, &mut output_share);
-                            (//返回值
-                                //shares3个
-                                (
-                                    Input::auth_share_from_parts(in_zero.clone(), in_zero.clone()),
-                                    Output::zeros(dims.output_dimensions()),
-                                    output_share,
-                                ),
-                                //keys2个
-                                prev_mac_keys.clone(),
-                            )
-                        /*     
-                        if linear_shares.keys().any(|k| k == &(i - 1)) {
-                            // If the layer comes after a linear layer, apply the function to
-                            // the last layer's output share MAC
-                            let prev_mac_keys = mac_keys.get(&(i - 1)).unwrap();
-                            let prev_output_share = &linear_shares.get(&(i - 1)).unwrap().2;
-                            let mut output_share = Output::zeros(dims.output_dimensions());
-                            layer.evaluate_naive_auth(prev_output_share, &mut output_share);
-                            (//返回值
-                                //shares3个
-                                (
-                                    Input::auth_share_from_parts(in_zero.clone(), in_zero.clone()),
-                                    Output::zeros(dims.output_dimensions()),
-                                    output_share,
-                                ),
-                                //keys2个
-                                prev_mac_keys.clone(),
-                            )
-                        }
-                        */ /*else {
-                            // If the layer comes after a non-linear layer, receive the
-                            // randomizer from the client, authenticate it, and then apply the
-                            // function to the MAC share
-                            let (key, input_share) =
-                                LinearProtocol::<TenBitExpParams>::offline_server_auth_share(
-                                    &mut reader,
-                                    &mut writer,
-                                    dims.input_dimensions(),
-                                    &sfhe,
-                                    rng,
-                                )
-                                .unwrap();
-                            let mut output_share = Output::zeros(dims.output_dimensions());
-                            layer.evaluate_naive_auth(&input_share, &mut output_share);
-                            (//返回值
-                                //shares3个
-                                (
-                                    -input_share,
-                                    Output::zeros(dims.output_dimensions()),
-                                    output_share,
-                                ),
-                                //keys2个
-                                (key, key),
-                            )
-                        }*/
-                    }*/
+                    
                 };
                 linear_shares.insert(i, shares);
                 mac_keys.insert(i, keys);
@@ -575,9 +499,5 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
         }
     }
     timer_end!(linear_time);
- /*    add_to_trace!(|| "Communication", || format!(
-        "Read {} bytes\nWrote {} bytes",
-        reader.count(),
-        writer.count()
-    ));*/
+ 
 }

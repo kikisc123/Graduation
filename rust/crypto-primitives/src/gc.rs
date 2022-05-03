@@ -579,6 +579,90 @@ fn is_equal_vec<F: Fancy>(
         .collect::<Result<Vec<_>, _>>()
 }
 
+
+//构造acg协议电路
+pub fn acg<P: FixedPointParameters>(
+    b: &mut CircuitBuilder,
+    n: usize,
+) -> Result<(), CircuitBuilderError>
+where
+    <P::Field as PrimeField>::Params: Fp64Parameters,
+    P::Field: PrimeField<BigInt = <<P::Field as PrimeField>::Params as FpParameters>::BigInt>,
+{
+    let p = u128::from(<<P::Field as PrimeField>::Params>::MODULUS.0);
+    let exponent_size = P::EXPONENT_CAPACITY as usize;
+
+    let p_over_2 = p / 2;
+    let neg_p_over_2 = !p_over_2 + 1;
+    let neg_p = !p + 1;
+    let q = 2;//还是采用模量为2电路把。。。模p不会。。。
+    let num_bits = num_bits(p);
+
+    let moduli = vec![q; num_bits];
+    let neg_p = b.bin_constant_bundle(neg_p, num_bits)?;
+    let neg_p_over_2_bits = b
+        .constant_bundle(&util::u128_to_bits(neg_p_over_2, num_bits), &moduli)?
+        .into();
+    let zero = b.constant(0, 2)?;
+    let one = b.constant(1, 2)?;
+    for _ in 0..n {
+        //
+        let s1 = BinaryBundle::new(b.evaluator_inputs(&moduli));
+        let s1_next = BinaryBundle::new(b.evaluator_inputs(&moduli));
+        let s2 = BinaryBundle::new(b.garbler_inputs(&moduli));
+        let s2_next = BinaryBundle::new(b.garbler_inputs(&moduli));
+        let res = b.bin_addition_no_carry(&s1, &s2)?;
+ 
+        let layer_input = mod_p_helper(b, &neg_p, &res).unwrap();
+
+
+        let res = neg_p_over_2_helper(b, neg_p_over_2, &neg_p_over_2_bits, &layer_input)?;
+        let zs_is_positive = res.wires().last().unwrap();
+
+        // 开始计算acg
+        let mut acg_res = Vec::with_capacity(num_bits);
+        let acg_6_size = exponent_size + 3;
+
+        for wire in layer_input.wires().iter().take(acg_6_size + 5) {
+            acg_res.push(b.and(&zs_is_positive, wire)?);
+        }
+        let is_seven = b.and_many(&acg_res[(exponent_size + 1)..acg_6_size])?;
+        let some_higher_bit_is_set = b.or_many(&acg_res[acg_6_size..])?;
+
+        let should_be_six = b.or(&some_higher_bit_is_set, &is_seven)?;
+
+        for wire in &mut acg_res[acg_6_size..] {
+            *wire = zero;
+        }
+        let lsb = &mut acg_res[exponent_size];
+        *lsb = mux_single_bit(b, &should_be_six, lsb, &zero)?;
+
+        let middle_bit = &mut acg_res[exponent_size + 1];
+        *middle_bit = mux_single_bit(b, &should_be_six, middle_bit, &one)?;
+
+        let msb = &mut acg_res[exponent_size + 2];
+        *msb = mux_single_bit(b, &should_be_six, msb, &one)?;
+
+        for wire in &mut acg_res[..exponent_size] {
+            *wire = mux_single_bit(b, &should_be_six, wire, &zero)?;
+        }
+
+        acg_res.extend(std::iter::repeat(zero).take(num_bits - acg_6_size - 5));
+
+        let acg_res = BinaryBundle::new(acg_res);
+
+
+        let res = b.bin_addition_no_carry(&acg_res, &s1_next)?;
+        let next_share = mod_p_helper(b, &neg_p, &res)?;
+
+        let res = b.bin_addition_no_carry(&next_share, &s2_next)?;
+        let next_share = mod_p_helper(b, &neg_p, &res)?;
+
+        b.output_bundle(&next_share)?;
+    }
+    Ok(())
+}
+
 /// Garbled circuit implementation of conditional disclosure of secrets
 /// Checks correctness of additive MAC shares and outputs GC labels
 /// to evaluator

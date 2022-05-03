@@ -6,6 +6,7 @@ use std::{
     net::{TcpListener, TcpStream},
 };
 
+//server 与client连接TCP通道函数
 pub fn acg_client_connect(
     addr: &str,
 ) -> (
@@ -42,6 +43,8 @@ pub fn acg_server_connect(
 }
 
 
+
+//server与client传递信息通过序列化实现
 #[inline]
 pub fn acg_serialize<W: std::io::Write + Send, T: ?Sized>(
     writer: &mut IMuxSync<W>,

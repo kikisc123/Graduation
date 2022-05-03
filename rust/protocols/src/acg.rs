@@ -33,16 +33,9 @@ use algebra::{near_mersenne_64::FParameters,fields::PrimeField};
 use crypto_primitives::{AuthShare, Share};
 use scuttlebutt::Channel;
 use ocelot::ot::{AlszReceiver as OTReceiver, AlszSender as OTSender, Receiver, Sender};
-use ocelot::ot::{ChouOrlandiSender,ChouOrlandiReceiver};
 use rayon::prelude::*;
 use rand::{Rng,SeedableRng};
 use rand_chacha::ChaChaRng;
-use io_utils::imux::IMuxSync;
-use io_utils::{counting::CountingIO};
-use std::{
-    io::{BufReader, BufWriter},
-    net::{TcpListener, TcpStream},
-};
 
 
 #[derive(Default)]
@@ -52,11 +45,10 @@ pub struct ACGProtocol<P: FixedPointParameters> {
 
 pub struct ACGProtocolType;
 
-
+//server和client之间传递数据的包装形式
 pub type ServerGcMsgSend<'a> = OutMessage<'a, (&'a [GarbledCircuit], &'a [Wire]), ACGProtocolType>;
 pub type ClientGcMsgRcv = InMessage<(Vec<GarbledCircuit>, Vec<Wire>), ACGProtocolType>;
 
-// The message is a slice of (vectors of) input labels;
 pub type ServerLabelMsgSend<'a> = OutMessage<'a, [Vec<Wire>], ACGProtocolType>;
 pub type ClientLabelMsgRcv = InMessage<Vec<Vec<Wire>>, ACGProtocolType>;
 
@@ -84,6 +76,7 @@ impl FixedPointParameters for TenBitExpParams {
 }
 type TenBitExpFP = FixedPoint<TenBitExpParams>;
 
+//随机数种子
 const RANDOMNESS: [u8; 32] = [
     0x11, 0xe0, 0x8f, 0xbc, 0x89, 0xa7, 0x34, 0x01, 0x45, 0x86, 0x82, 0xb6, 0x51, 0xda, 0xf4, 0x76,
     0x5d, 0xc9, 0x8d, 0xea, 0x23, 0xf2, 0x90, 0x8f, 0x9d, 0x03, 0xf2, 0x77, 0xd3, 0x4a, 0x52, 0xd2,
@@ -99,6 +92,7 @@ where
     s.into()
 }
 
+//随机数生成
 fn generate_random_number<R: Rng>(rng: &mut R) -> (f64, TenBitExpFP) {
     let is_neg: bool = rng.gen();
     let mul = if is_neg { -10.0 } else { 10.0 };
@@ -108,7 +102,7 @@ fn generate_random_number<R: Rng>(rng: &mut R) -> (f64, TenBitExpFP) {
     (f, n)
 }
 
-
+//实现ACG协议
 impl<P: FixedPointParameters> ACGProtocol<P>
 where
     P: FixedPointParameters,//+ crypto_primitives::AuthShare,
@@ -140,6 +134,7 @@ where
         ),
         bincode::Error,
     > {
+        //建立client和server之间的TCP通信
         let (mut reader, mut writer) = acg_utils::acg_server_connect(server_addr);
         let start_time = timer_start!(|| "预处理阶段客户端ACG协议(by GC)");
 
@@ -157,7 +152,7 @@ where
 
         let mut b = CircuitBuilder::new();
         /*电路设计 */
-        crypto_primitives::gc::relu::<P>(&mut b, 1).unwrap();
+        crypto_primitives::gc::acg::<P>(&mut b, 1).unwrap();
         let c=b.finish();
         let garble_time = timer_start!(|| "电路混淆");
         //调用库混淆电路c，生活混淆后的电路gc，
@@ -173,7 +168,7 @@ where
         timer_end!(garble_time);
 
         let encode_time = timer_start!(|| "对混淆电路输入进行编码");
-        //这是输入的个数
+        //输入的个数
         let num_garbler_inputs = c.num_garbler_inputs();
         let num_evaluator_inputs = c.num_evaluator_inputs();
 
@@ -325,6 +320,12 @@ where
         timer_end!(send_mac_time);
         
         timer_end!(start_time);
+
+        add_to_trace!(|| "Communication", || format!(
+            "Read {} bytes\nWrote {} bytes",
+            reader.count(),
+            writer.count()
+        ));
         
         Ok(
             (
@@ -382,8 +383,8 @@ where
             reader.count(),
             writer.count()
         ));
-        reader.reset();
-        writer.reset();
+        //reader.reset();
+        //writer.reset();
 
         assert_eq!(gc_s.len(), number_of_ACGs);
         use num_traits::identities::Zero;
@@ -435,7 +436,7 @@ where
         let eval_time = timer_start!(|| "计算混淆电路GC");
         let mut b = CircuitBuilder::new();
         /*电路设计 */
-        crypto_primitives::gc::relu::<P>(&mut b, 1).unwrap();
+        crypto_primitives::gc::acg::<P>(&mut b, 1).unwrap();
         let c=b.finish();
         let num_evaluator_inputs = c.num_evaluator_inputs();
         let num_garbler_inputs = c.num_garbler_inputs();
@@ -485,7 +486,13 @@ where
 
         timer_end!(start_time);
 
-        //暂不改输出
+        add_to_trace!(|| "Communication", || format!(
+            "Read {} bytes\nWrote {} bytes",
+            reader.count(),
+            writer.count()
+        ));
+
+ 
         Ok(
             (   server_r_mac_share, 
                 server_y_mac_share

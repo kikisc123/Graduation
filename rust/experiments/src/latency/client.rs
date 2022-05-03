@@ -388,13 +388,11 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
 ) {
     //通过ip+port连接client和server，并用reader和writer相互读写数据
     //let (mut reader, mut writer) = acg_client_connect(server_addr);
-
-    //let cfhe = acg_client_keygen(&mut writer).unwrap();//生成FHE所需key
-    //writer.reset();//重置写入流数量
+    //转到ACG协议是现实再连接
 
     let mut in_shares = BTreeMap::new();//Client's share,包含i层的share
     //let mut out_shares: BTreeMap<usize, Output<AuthAdditiveShare<F>>> = BTreeMap::new();//Server's share
-    let mut out_shares = BTreeMap::new();
+    let mut out_shares = BTreeMap::new();//server的share
     let linear_time = timer_start!(|| "预处理阶段线性层");
     for (i, layer) in architecture.layers.iter().enumerate() {
         //判断是否为线性层
@@ -402,9 +400,7 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
             //如果layer[i]为非线性层，则不做处理
             LayerInfo::NLL(_dims, NonLinearLayerInfo::ReLU { .. }) => {}
             //如果layer[i]为线性层：
-            LayerInfo::LL(dims, linear_layer_info) => {
-                let input_dims = dims.input_dimensions();//输入维度
-                let output_dims = dims.output_dimensions();//输出维度
+            LayerInfo::LL(_dims, linear_layer_info) => {
                 //e.g. return:(-randomizer, output_share)
                 // 判断是卷积、池化还是全连接层
                 let (in_share, out_share) = match &linear_layer_info {//该层的acg输出 
@@ -415,7 +411,7 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
                         //产生share
                         let mut shares = Vec::with_capacity(1);
                         //let mut rng1 = ChaChaRng::from_seed(RANDOMNESS);
-                        let (f1, n1) = generate_random_number(rng);
+                        let (_, n1) = generate_random_number(rng);
                         let(_,share)=n1.share(rng);
                         shares.push(share);
                         //ACG协议里面client的执行改为GC里面server的执行
@@ -429,58 +425,7 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
                         )
                         .unwrap()
                     }
-                    //既非卷积，也非全连接层，池化层或者identity
-                    /* 
-                    _ => {
-                        let inp_zero = Input::zeros(input_dims);
-                        let mut output_share = Output::zeros(output_dims);
-                        // If the layer comes after a linear layer, apply the function to
-                        // the last layer's output share MAC
-                        //如果该层位于线性层之后，则将该函数应用于最后一层的输出共享 MAC
-                        let prev_output_share = out_shares.get(&(i - 1)).unwrap();//上一层的输出share
-                        linear_layer_info
-                            .evaluate_naive_auth(&prev_output_share, &mut output_share);
-                        //返回值in_share and out_share
-                        (
-                            Input::auth_share_from_parts(inp_zero.clone(), inp_zero),
-                            output_share,
-                        )
-                        /* 
-                        if out_shares.keys().any(|k| k == &(i - 1)) {
-                            // If the layer comes after a linear layer, apply the function to
-                            // the last layer's output share MAC
-                            //如果该层位于线性层之后，则将该函数应用于最后一层的输出共享 MAC
-                            let prev_output_share = out_shares.get(&(i - 1)).unwrap();//上一层的输出share
-                            linear_layer_info
-                                .evaluate_naive_auth(&prev_output_share, &mut output_share);
-                            //返回值in_share and out_share
-                            (
-                                Input::auth_share_from_parts(inp_zero.clone(), inp_zero),
-                                output_share,
-                            )
-                            
-                        }
-                        */ /*else {
-                            // If the layer comes after a non-linear layer, generate a
-                            // randomizer, send it to the server to receive back an
-                            // authenticated share, and apply the function to that share
-                            let mut randomizer = Input::zeros(input_dims);//产生一个随机input_dim
-                            randomizer.iter_mut().for_each(|e| *e = F::uniform(rng));
-                            //client发送一个值，返回一个认证mac值
-                            let randomizer =
-                                LinearProtocol::<TenBitExpParams>::offline_client_auth_share(
-                                    &mut reader,
-                                    &mut writer,
-                                    randomizer,
-                                    &cfhe,
-                                )
-                                .unwrap();
-                            linear_layer_info.evaluate_naive_auth(&randomizer, &mut output_share);
-                            //返回值in_share and out_share
-                            (-randomizer, output_share)
-                        }
-                        */
-                    }*/
+                    
                 };
                 // r
                 in_shares.insert(i, in_share);
@@ -490,9 +435,5 @@ pub fn acg_gc<R: RngCore + CryptoRng>(
         }
     }
     timer_end!(linear_time);
-    /*add_to_trace!(|| "Communication", || format!(
-        "Read {} bytes\nWrote {} bytes",
-        reader.count(),
-        writer.count()
-    ));*/
+
 }
