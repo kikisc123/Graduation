@@ -13,7 +13,6 @@ pub fn acg_client_connect(
     IMuxSync<CountingIO<BufReader<TcpStream>>>,
     IMuxSync<CountingIO<BufWriter<TcpStream>>>,
 ) {
-    // TODO: Maybe change to rayon_num_threads
     let mut readers = Vec::with_capacity(16);
     let mut writers = Vec::with_capacity(16);
     for _ in 0..16 {

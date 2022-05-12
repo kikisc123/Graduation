@@ -235,8 +235,8 @@ where
             reader.count(),
             writer.count()
         ));
-        reader.reset();
-        writer.reset();
+        //reader.reset();//问题在这！！！大意了
+        //writer.reset();
 
 
         //OT协议传送标签
@@ -248,9 +248,15 @@ where
             let mut channel = Channel::new(r, w);
             
             let mut ot = OTSender::init(&mut channel, rng).unwrap();
-            ot.send(&mut channel, labels.as_slice(), rng).unwrap();
+            ot.send(&mut channel, labels.as_slice(), rng).unwrap();//这里reader与WriterTCP流形式要与ot一致！否则会导致OT传送失败
             timer_end!(ot_time);
         }
+
+        add_to_trace!(|| "OT Communication", || format!(
+            "Read {} bytes\nWrote {} bytes",
+            reader.count(),
+            writer.count()
+        ));
 
         let encode_garbler_input_time = timer_start!(|| "对Garbler输入进行编码");
         //产生share
@@ -416,7 +422,13 @@ where
         } else {
             Vec::new()
         };
-            
+           
+        add_to_trace!(|| "OT Communication", || format!(
+            "Read {} bytes\nWrote {} bytes",
+            reader.count(),
+            writer.count()
+        ));
+
         let rcv_time = timer_start!(|| "接收Garbler的输入线标签");
         let in_msg: ClientLabelMsgRcv = {
             let bytes: Vec<u8> = reader.read()?;

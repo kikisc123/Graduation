@@ -154,7 +154,9 @@ pub fn acg<R: RngCore + CryptoRng>(
                         //如果是卷积层或者全连接层，执行ACG协议,返回（input_share,output_share）
                         //返回两个值，为r_auth和linear_auth应该是要发给CDS用来对ri和Miri-si进行认证用的
                         //返回值in_share and out_share
-                        LinearProtocol::<TenBitExpParams>::offline_client_acg_protocol(
+                        reader.reset();
+                        writer.reset();
+                        let(r_auth, linear_auth)=LinearProtocol::<TenBitExpParams>::offline_client_acg_protocol(
                             &mut reader,
                             &mut writer,
                             layer.input_dimensions(),
@@ -162,7 +164,13 @@ pub fn acg<R: RngCore + CryptoRng>(
                             &mut acg_handler,
                             rng,
                         )
-                        .unwrap()
+                        .unwrap();
+                        add_to_trace!(|| "Communication test", || format!(
+                            "Read {} bytes\nWrote {} bytes",
+                            reader.count(),
+                            writer.count()
+                        ));
+                        (r_auth, linear_auth)
                     }
                     //既非卷积，也非全连接层，池化层或者identity
                     _ => {
@@ -187,14 +195,17 @@ pub fn acg<R: RngCore + CryptoRng>(
                             let mut randomizer = Input::zeros(input_dims);//产生一个随机input_dim
                             randomizer.iter_mut().for_each(|e| *e = F::uniform(rng));
                             //client发送一个值，返回一个对应的认证mac值
-                            let randomizer =
+                            let randomizer ={
+                                let (mut reader1, mut writer1) = client_connect(server_addr);
                                 LinearProtocol::<TenBitExpParams>::offline_client_auth_share(
-                                    &mut reader,
-                                    &mut writer,
+                                    &mut reader1,
+                                    &mut writer1,
                                     randomizer,
                                     &cfhe,
                                 )
-                                .unwrap();
+                                .unwrap()
+                            };
+                                
                             linear_layer_info.evaluate_naive_auth(&randomizer, &mut output_share);
                             //返回值in_share and out_share
                             (-randomizer, output_share)

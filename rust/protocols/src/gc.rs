@@ -351,7 +351,7 @@ where
         timer_end!(send_time);
         bytes::serialize(&mut *writer, &sent_message)?;
 
-        let rcv_time = timer_start!(|| "Receiving shares");
+        let rcv_time = timer_start!(|| "Receiving shares");//接收xi+1-ri+1??
         let _: ClientLabelMsgRcv = bytes::deserialize(&mut *reader)?;
         let in_msg: ServerShareMsgRcv<P> = bytes::deserialize(reader)?;
         timer_end!(rcv_time);

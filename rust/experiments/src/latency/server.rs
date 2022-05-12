@@ -112,7 +112,7 @@ pub fn acg<R: RngCore + CryptoRng>(
 ) {
     //连接server和client
     let (mut reader, mut writer) = server_connect(server_addr);
-
+  
     // Keygen
     let sfhe = server_keygen(&mut reader).unwrap();//接收FHE所需key
     reader.reset();
@@ -149,6 +149,9 @@ pub fn acg<R: RngCore + CryptoRng>(
                         };
                         //返回那两个值
                         //返回值shares and keys
+                        reader.reset();
+                        writer.reset();
+                        let((r_auth, linear_share, linear_auth), (mac_key_r, mac_key_y))=
                         LinearProtocol::<TenBitExpParams>::offline_server_acg_protocol(
                             &mut reader,
                             &mut writer,
@@ -157,7 +160,13 @@ pub fn acg<R: RngCore + CryptoRng>(
                             &mut acg_handler,
                             rng,
                         )
-                        .unwrap()
+                        .unwrap();
+                        add_to_trace!(|| "Communication test", || format!(
+                            "Read {} bytes\nWrote {} bytes",
+                            reader.count(),
+                            writer.count()
+                        ));
+                        ((r_auth, linear_share, linear_auth), (mac_key_r, mac_key_y))
                     }
                     //如果是池化层
                     LinearLayer::AvgPool { dims, .. } | LinearLayer::Identity { dims } => {
@@ -183,15 +192,17 @@ pub fn acg<R: RngCore + CryptoRng>(
                             // If the layer comes after a non-linear layer, receive the
                             // randomizer from the client, authenticate it, and then apply the
                             // function to the MAC share
-                            let (key, input_share) =
+                            let (key, input_share) ={
+                                let (mut reader1, mut writer1) = server_connect(server_addr);
                                 LinearProtocol::<TenBitExpParams>::offline_server_auth_share(
-                                    &mut reader,
-                                    &mut writer,
-                                    dims.input_dimensions(),
-                                    &sfhe,
-                                    rng,
-                                )
-                                .unwrap();
+                                &mut reader1,
+                                &mut writer1,
+                                dims.input_dimensions(),
+                                &sfhe,
+                                rng,
+                            )
+                            .unwrap()};
+                                
                             let mut output_share = Output::zeros(dims.output_dimensions());
                             layer.evaluate_naive_auth(&input_share, &mut output_share);
                             (//返回值
@@ -213,6 +224,7 @@ pub fn acg<R: RngCore + CryptoRng>(
         }
     }
     timer_end!(linear_time);
+
     add_to_trace!(|| "Communication", || format!(
         "Read {} bytes\nWrote {} bytes",
         reader.count(),

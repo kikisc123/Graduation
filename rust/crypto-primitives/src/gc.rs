@@ -621,17 +621,17 @@ where
 
         // 开始计算acg
         let mut acg_res = Vec::with_capacity(num_bits);
-        let acg_6_size = exponent_size + 3;
+        let acg_size = exponent_size + 3;
 
-        for wire in layer_input.wires().iter().take(acg_6_size + 5) {
+        for wire in layer_input.wires().iter().take(acg_size + 5) {
             acg_res.push(b.and(&zs_is_positive, wire)?);
         }
-        let is_seven = b.and_many(&acg_res[(exponent_size + 1)..acg_6_size])?;
-        let some_higher_bit_is_set = b.or_many(&acg_res[acg_6_size..])?;
+        let is_seven = b.and_many(&acg_res[(exponent_size + 1)..acg_size])?;
+        let some_higher_bit_is_set = b.or_many(&acg_res[acg_size..])?;
 
         let should_be_six = b.or(&some_higher_bit_is_set, &is_seven)?;
 
-        for wire in &mut acg_res[acg_6_size..] {
+        for wire in &mut acg_res[acg_size..] {
             *wire = zero;
         }
         let lsb = &mut acg_res[exponent_size];
@@ -647,7 +647,7 @@ where
             *wire = mux_single_bit(b, &should_be_six, wire, &zero)?;
         }
 
-        acg_res.extend(std::iter::repeat(zero).take(num_bits - acg_6_size - 5));
+        acg_res.extend(std::iter::repeat(zero).take(num_bits - acg_size - 5));
 
         let acg_res = BinaryBundle::new(acg_res);
 
